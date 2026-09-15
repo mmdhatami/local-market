@@ -1,6 +1,10 @@
-name = "local-market-api"
+name = "local-market"
 main = "src/index.ts"
 compatibility_date = "2026-09-15"
 
 [observability]
 enabled = true
+
+[assets]
+directory = "../../apps/web/dist"
+binding = "ASSETS"
