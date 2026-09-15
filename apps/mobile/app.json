@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "name": "بازار",
+    "slug": "local-market",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "android": {
+      "package": "com.localmarket.app"
+    }
+  }
+}
