@@ -11,7 +11,7 @@ app.get("/", (c) => {
     success: true,
     service: "local-market-api",
     message: "API بازار با موفقیت فعال است",
-    version: "1.0.0"
+    version: "1.1.0"
   });
 });
 
@@ -36,52 +36,44 @@ app.get("/api/health", async (c) => {
   });
 });
 
-app.get("/api/categories", (c) => {
-  return c.json({
-    success: true,
-    categories: [
+app.get("/api/categories", async (c) => {
+  if (!c.env.DB) {
+    return c.json(
       {
-        id: "buy-sell",
-        title: "خرید و فروش",
-        icon: "🛒"
+        success: false,
+        error: "Database is not configured"
       },
+      500
+    );
+  }
+
+  try {
+    const result = await c.env.DB.prepare(`
+      SELECT
+        id,
+        title,
+        icon,
+        description,
+        parent_id,
+        sort_order
+      FROM market_categories
+      WHERE is_active = 1
+      ORDER BY sort_order ASC, created_at ASC
+    `).all();
+
+    return c.json({
+      success: true,
+      categories: result.results
+    });
+  } catch (error) {
+    return c.json(
       {
-        id: "services",
-        title: "خدمات",
-        icon: "🛠️"
+        success: false,
+        error: "Failed to load categories from database"
       },
-      {
-        id: "businesses",
-        title: "کسب‌وکارها",
-        icon: "🏪"
-      },
-      {
-        id: "jobs",
-        title: "کار و استخدام",
-        icon: "💼"
-      },
-      {
-        id: "real-estate",
-        title: "ملک",
-        icon: "🏠"
-      },
-      {
-        id: "vehicles",
-        title: "خودرو",
-        icon: "🚗"
-      },
-      {
-        id: "agriculture",
-        title: "کشاورزی",
-        icon: "🌱"
-      },
-      {
-        id: "rent",
-        title: "اجاره",
-        icon: "🔑"
-      }
-    ]
-  });
+      500
+    );
+  }
 });
 
 app.get("/api", (c) => {
