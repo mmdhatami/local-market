@@ -1,0 +1,20 @@
+{
+  "name": "local-market",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local smart marketplace - Website, Android app and shared backend",
+  "workspaces": [
+    "apps/*",
+    "services/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "web:dev": "npm --workspace apps/web run dev",
+    "web:build": "npm --workspace apps/web run build",
+    "api:dev": "npm --workspace services/api run dev",
+    "api:deploy": "npm --workspace services/api run deploy"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
