@@ -1,8 +1,55 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
+const API_BASE_URL =
+  "https://local-market.mmd-hatami-4450.workers.dev";
+
+type Category = {
+  id: string;
+  title: string;
+  icon: string;
+  description: string | null;
+  parent_id: string | null;
+  sort_order: number;
+};
+
 function App() {
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadCategories() {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/categories`);
+
+        if (!response.ok) {
+          throw new Error("Failed to load categories");
+        }
+
+        const data = await response.json();
+
+        if (!cancelled && data.success && Array.isArray(data.categories)) {
+          setCategories(data.categories);
+        }
+      } catch (error) {
+        console.error("Categories API error:", error);
+      } finally {
+        if (!cancelled) {
+          setCategoriesLoading(false);
+        }
+      }
+    }
+
+    loadCategories();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <div className="app">
       <header className="topbar">
@@ -40,11 +87,13 @@ function App() {
 
             <div className="search-box">
               <span>⌕</span>
+
               <input
                 type="text"
                 placeholder="چی می‌خوای پیدا کنی؟"
                 aria-label="جستجو"
               />
+
               <button>جستجو</button>
             </div>
           </div>
@@ -65,6 +114,7 @@ function App() {
 
             <div>
               <strong>چیزهای نزدیک شما را پیدا کنید</strong>
+
               <p>
                 با فعال کردن موقعیت مکانی، آگهی‌ها و خدمات نزدیک خودتان را
                 سریع‌تر پیدا کنید.
@@ -86,14 +136,27 @@ function App() {
           </div>
 
           <div className="category-grid">
-            <Category icon="🛒" title="خرید و فروش" />
-            <Category icon="🛠️" title="خدمات" />
-            <Category icon="🏪" title="کسب‌وکارها" />
-            <Category icon="💼" title="کار و استخدام" />
-            <Category icon="🏠" title="ملک" />
-            <Category icon="🚗" title="خودرو" />
-            <Category icon="🌱" title="کشاورزی" />
-            <Category icon="🔑" title="اجاره" />
+            {categoriesLoading ? (
+              <>
+                <CategorySkeleton />
+                <CategorySkeleton />
+                <CategorySkeleton />
+                <CategorySkeleton />
+              </>
+            ) : categories.length > 0 ? (
+              categories.map((category) => (
+                <Category
+                  key={category.id}
+                  icon={category.icon || "📦"}
+                  title={category.title}
+                />
+              ))
+            ) : (
+              <div className="category-error">
+                <strong>دسته‌بندی‌ها بارگذاری نشدند</strong>
+                <p>لطفاً صفحه را دوباره باز کنید.</p>
+              </div>
+            )}
           </div>
         </section>
 
@@ -172,6 +235,15 @@ function Category({
   );
 }
 
+function CategorySkeleton() {
+  return (
+    <div className="category-card category-skeleton">
+      <span className="category-icon">◌</span>
+      <strong>در حال بارگذاری...</strong>
+    </div>
+  );
+}
+
 function Feature({
   icon,
   title,
@@ -184,6 +256,7 @@ function Feature({
   return (
     <div className="feature-card">
       <span>{icon}</span>
+
       <div>
         <strong>{title}</strong>
         <p>{text}</p>
