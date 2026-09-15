@@ -2,19 +2,26 @@ import { Hono } from "hono";
 
 type Env = {
   DB?: D1Database;
+  ASSETS?: Fetcher;
 };
 
 const app = new Hono<{ Bindings: Env }>();
 
-app.get("/", (c) => {
+// سایت اصلی
+app.get("/", async (c) => {
+  if (c.env.ASSETS) {
+    return c.env.ASSETS.fetch(c.req.raw);
+  }
+
   return c.json({
     success: true,
     service: "local-market-api",
     message: "API بازار با موفقیت فعال است",
-    version: "1.1.0"
+    version: "1.2.0"
   });
 });
 
+// سلامت API و اتصال دیتابیس
 app.get("/api/health", async (c) => {
   let database = "not-configured";
 
@@ -36,6 +43,7 @@ app.get("/api/health", async (c) => {
   });
 });
 
+// دریافت دسته‌بندی‌ها از D1
 app.get("/api/categories", async (c) => {
   if (!c.env.DB) {
     return c.json(
@@ -65,7 +73,7 @@ app.get("/api/categories", async (c) => {
       success: true,
       categories: result.results
     });
-  } catch (error) {
+  } catch {
     return c.json(
       {
         success: false,
@@ -76,12 +84,28 @@ app.get("/api/categories", async (c) => {
   }
 });
 
+// API اصلی
 app.get("/api", (c) => {
   return c.json({
     success: true,
     name: "بازار",
     description: "بازار هوشمند محلی"
   });
+});
+
+// برای مسیرهای سایت React
+app.notFound(async (c) => {
+  if (c.env.ASSETS) {
+    return c.env.ASSETS.fetch(c.req.raw);
+  }
+
+  return c.json(
+    {
+      success: false,
+      error: "Not found"
+    },
+    404
+  );
 });
 
 export default app;
