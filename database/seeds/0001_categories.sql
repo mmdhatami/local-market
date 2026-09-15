@@ -1,0 +1,83 @@
+INSERT OR IGNORE INTO categories
+(id, title, icon, parent_id, active, sort_order, created_at, updated_at)
+VALUES
+(
+  'buy-sell',
+  'خرید و فروش',
+  '🛒',
+  NULL,
+  1,
+  1,
+  datetime('now'),
+  datetime('now')
+),
+(
+  'services',
+  'خدمات',
+  '🛠️',
+  NULL,
+  1,
+  2,
+  datetime('now'),
+  datetime('now')
+),
+(
+  'businesses',
+  'کسب‌وکارها',
+  '🏪',
+  NULL,
+  1,
+  3,
+  datetime('now'),
+  datetime('now')
+),
+(
+  'jobs',
+  'کار و استخدام',
+  '💼',
+  NULL,
+  1,
+  4,
+  datetime('now'),
+  datetime('now')
+),
+(
+  'real-estate',
+  'ملک',
+  '🏠',
+  NULL,
+  1,
+  5,
+  datetime('now'),
+  datetime('now')
+),
+(
+  'vehicles',
+  'خودرو',
+  '🚗',
+  NULL,
+  1,
+  6,
+  datetime('now'),
+  datetime('now')
+),
+(
+  'agriculture',
+  'کشاورزی',
+  '🌱',
+  NULL,
+  1,
+  7,
+  datetime('now'),
+  datetime('now')
+),
+(
+  'rent',
+  'اجاره',
+  '🔑',
+  NULL,
+  1,
+  8,
+  datetime('now'),
+  datetime('now')
+);
