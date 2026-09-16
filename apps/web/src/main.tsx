@@ -1,4 +1,3 @@
-```tsx
 import React, {
   useEffect,
   useRef,
@@ -91,9 +90,7 @@ type Page =
    HELPERS
 ========================================================= */
 
-function formatPrice(
-  price?: number | null
-) {
+function formatPrice(price?: number | null) {
   if (
     price === null ||
     price === undefined ||
@@ -103,16 +100,18 @@ function formatPrice(
     return "توافقی";
   }
 
- return (
-  Number(price).toLocaleString("fa-IR") +
-  " تومان"
-);
+  return (
+    Number(price).toLocaleString("fa-IR") +
+    " تومان"
+  );
 }
 
 function formatCondition(
   condition?: string | null
 ) {
-  if (!condition) return "";
+  if (!condition) {
+    return "";
+  }
 
   const values: Record<string, string> = {
     new: "نو",
@@ -120,32 +119,33 @@ function formatCondition(
     like_new: "در حد نو",
   };
 
-  return (
-    values[condition] ||
-    condition
-  );
+  return values[condition] || condition;
 }
 
 function truncateText(
   text?: string | null,
   length = 90
 ) {
-  if (!text) return "";
+  if (!text) {
+    return "";
+  }
 
-  return text.length > length
-  return text.length > length
-  ? text.slice(0, length) + "…"
-  : text;
+  if (text.length > length) {
+    return text.slice(0, length) + "…";
+  }
+
+  return text;
 }
 
 function getStoredUser(): User | null {
   try {
-    const raw =
-      localStorage.getItem(
-        "dardone_user"
-      );
+    const raw = localStorage.getItem(
+      "dardone_user"
+    );
 
-    if (!raw) return null;
+    if (!raw) {
+      return null;
+    }
 
     return JSON.parse(raw);
   } catch {
@@ -175,32 +175,27 @@ async function apiFetch<T>(
   options?: RequestInit
 ): Promise<T> {
   const response = await fetch(
-   API_BASE_URL + url,
+    API_BASE_URL + url,
     {
       ...options,
       headers: {
-        "Content-Type":
-          "application/json",
+        "Content-Type": "application/json",
         ...(options?.headers || {}),
       },
     }
   );
 
-  const text =
-    await response.text();
+  const text = await response.text();
 
   let data: any = {};
 
   try {
-    data = text
-      ? JSON.parse(text)
-      : {};
+    data = text ? JSON.parse(text) : {};
   } catch {
     data = {
       success: false,
       error:
-        text ||
-        "پاسخ نامعتبر از سرور",
+        text || "پاسخ نامعتبر از سرور",
     };
   }
 
@@ -208,9 +203,8 @@ async function apiFetch<T>(
     throw new Error(
       data?.error ||
         data?.message ||
-  data?.error ||
-  data?.message ||
-  "خطای سرور " + response.status
+        "خطای سرور " +
+          response.status
     );
   }
 
@@ -235,8 +229,7 @@ async function uploadImageToImageKit(
   file: File,
   auth: ImageKitAuth
 ) {
-  const formData =
-    new FormData();
+  const formData = new FormData();
 
   formData.append(
     "file",
@@ -273,14 +266,13 @@ async function uploadImageToImageKit(
     "/dardone/listings"
   );
 
-  const response =
-    await fetch(
-      "https://upload.imagekit.io/api/v1/files/upload",
-      {
-        method: "POST",
-        body: formData,
-      }
-    );
+  const response = await fetch(
+    "https://upload.imagekit.io/api/v1/files/upload",
+    {
+      method: "POST",
+      body: formData,
+    }
+  );
 
   const text =
     await response.text();
@@ -325,8 +317,10 @@ function App() {
   const [page, setPage] =
     useState<Page>("home");
 
-  const [categories, setCategories] =
-    useState<Category[]>([]);
+  const [
+    categories,
+    setCategories,
+  ] = useState<Category[]>([]);
 
   const [
     selectedCategory,
@@ -553,9 +547,7 @@ function App() {
     );
 
     setSelectedListing(null);
-
     setSearch("");
-
     setPage("category");
 
     await loadListings(
@@ -581,9 +573,7 @@ function App() {
         );
       }
 
-      if (
-        searchValue.trim()
-      ) {
+      if (searchValue.trim()) {
         params.set(
           "search",
           searchValue.trim()
@@ -593,9 +583,9 @@ function App() {
       const query =
         params.toString();
 
-    const url = query
-  ? "/api/listings?" + query
-  : "/api/listings";
+      const url = query
+        ? "/api/listings?" + query
+        : "/api/listings";
 
       const data =
         await apiFetch<{
@@ -631,16 +621,17 @@ function App() {
     );
 
     setPage("listing");
-
     setListingLoading(true);
 
     try {
-     const data = await apiFetch<{
-  listing: Listing;
-  photos: ListingPhoto[];
-}>(
-  "/api/listings/" + listing.id
-);
+      const data =
+        await apiFetch<{
+          listing: Listing;
+          photos: ListingPhoto[];
+        }>(
+          "/api/listings/" +
+            listing.id
+        );
 
       const photos =
         data.photos || [];
@@ -687,15 +678,12 @@ function App() {
     );
 
     setAccountMessage("");
-
     setPage("home");
   }
 
   function logout() {
     clearUser();
-
     setUser(null);
-
     setPage("home");
   }
 
@@ -815,9 +803,7 @@ function App() {
       value
     );
 
-    setSelectedCategory(
-      null
-    );
+    setSelectedCategory(null);
   }
 
   /* =======================================================
@@ -827,7 +813,9 @@ function App() {
   function addSelectedFiles(
     files: FileList | null
   ) {
-    if (!files) return;
+    if (!files) {
+      return;
+    }
 
     const incoming =
       Array.from(files);
@@ -838,7 +826,9 @@ function App() {
       MAX_PHOTOS
     ) {
       setCreateMessage(
-        `حداکثر ${MAX_PHOTOS} عکس می‌توانید انتخاب کنید.`
+        "حداکثر " +
+          MAX_PHOTOS +
+          " عکس می‌توانید انتخاب کنید."
       );
 
       return;
@@ -865,7 +855,9 @@ function App() {
         MAX_FILE_SIZE
       ) {
         setCreateMessage(
-          `حجم عکس «${file.name}» بیشتر از ۱۰ مگابایت است.`
+          "حجم عکس «" +
+            file.name +
+            "» بیشتر از ۱۰ مگابایت است."
         );
 
         continue;
@@ -919,7 +911,6 @@ function App() {
       );
 
     setSelectedFiles(files);
-
     setPreviewUrls(urls);
   }
 
@@ -957,8 +948,7 @@ function App() {
     }
 
     if (
-      title.trim().length <
-      3
+      title.trim().length < 3
     ) {
       setCreateMessage(
         "عنوان آگهی باید حداقل ۳ کاراکتر باشد."
@@ -1029,15 +1019,11 @@ function App() {
       /* ===================================================
          UPLOAD PHOTOS
 
-         IMPORTANT:
-         ImageKit token is single-use.
-         Therefore a NEW auth token is requested
-         for EVERY individual photo.
+         هر عکس توکن ImageKit جداگانه می‌گیرد.
       =================================================== */
 
       if (
-        selectedFiles.length >
-        0
+        selectedFiles.length > 0
       ) {
         setCreateMessage(
           "در حال آماده‌سازی آپلود عکس‌ها..."
@@ -1050,14 +1036,22 @@ function App() {
           index++
         ) {
           setCreateMessage(
-            `در حال آماده‌سازی عکس ${index + 1} از ${selectedFiles.length}...`
+            "در حال آماده‌سازی عکس " +
+              (index + 1) +
+              " از " +
+              selectedFiles.length +
+              "..."
           );
 
           const auth =
             await getImageKitAuth();
 
           setCreateMessage(
-            `در حال آپلود عکس ${index + 1} از ${selectedFiles.length}...`
+            "در حال آپلود عکس " +
+              (index + 1) +
+              " از " +
+              selectedFiles.length +
+              "..."
           );
 
           const uploaded =
@@ -1067,7 +1061,9 @@ function App() {
             );
 
           await apiFetch(
-            `/api/listings/${createdListing.id}/photos`,
+            "/api/listings/" +
+              createdListing.id +
+              "/photos",
             {
               method:
                 "POST",
@@ -1090,8 +1086,7 @@ function App() {
       }
 
       setCreateMessage(
-        selectedFiles.length >
-          0
+        selectedFiles.length > 0
           ? "آگهی و عکس‌ها با موفقیت ثبت شدند."
           : "آگهی با موفقیت ثبت شد."
       );
@@ -1106,12 +1101,12 @@ function App() {
           listing: Listing;
           photos: ListingPhoto[];
         }>(
-          `/api/listings/${createdListing.id}`
+          "/api/listings/" +
+            createdListing.id
         );
 
       const photos =
-        finalData.photos ||
-        [];
+        finalData.photos || [];
 
       setSelectedListing({
         ...finalData.listing,
@@ -1191,8 +1186,7 @@ function App() {
           />
         )}
 
-        {page ===
-          "category" && (
+        {page === "category" && (
           <CategoryPage
             category={
               selectedCategory
@@ -1220,8 +1214,7 @@ function App() {
           />
         )}
 
-        {page ===
-          "listing" &&
+        {page === "listing" &&
           selectedListing && (
             <ListingDetailPage
               listing={
@@ -1236,8 +1229,7 @@ function App() {
             />
           )}
 
-        {page ===
-          "account" && (
+        {page === "account" && (
           <AccountPage
             user={user}
             mode={
@@ -1291,8 +1283,7 @@ function App() {
           />
         )}
 
-        {page ===
-          "create" && (
+        {page === "create" && (
           <CreateListingPage
             selectedCategory={
               selectedCategory
@@ -1453,7 +1444,8 @@ function Header({
           type="button"
         >
           {user
-            ? `👤 ${user.full_name}`
+            ? "👤 " +
+              user.full_name
             : "👤 حساب من"}
         </button>
       </div>
@@ -1886,8 +1878,7 @@ function ListingDetailPage({
 }) {
   const photos =
     listing.photos &&
-    listing.photos.length >
-      0
+    listing.photos.length > 0
       ? listing.photos
       : listing.image_url
       ? [
@@ -1930,8 +1921,7 @@ function ListingDetailPage({
 
       <section className="listing-detail">
         <div className="detail-gallery">
-          {photos.length >
-          0 ? (
+          {photos.length > 0 ? (
             <>
               <div className="main-photo">
                 <img
@@ -1939,8 +1929,7 @@ function ListingDetailPage({
                     photos[
                       activePhoto
                     ]?.file_url ||
-                    photos[0]
-                      .file_url
+                    photos[0].file_url
                   }
                   alt={
                     listing.title
@@ -1990,7 +1979,12 @@ function ListingDetailPage({
                           src={
                             photo.file_url
                           }
-                          alt={`${listing.title} ${index + 1}`}
+                          alt={
+                            listing.title +
+                            " " +
+                            (index +
+                              1)
+                          }
                         />
                       </button>
                     )
@@ -2388,9 +2382,7 @@ function CreateListingPage({
             </label>
           </div>
 
-          {/* =================================================
-              PHOTOS
-          ================================================= */}
+          {/* PHOTOS */}
 
           <div className="photo-upload-section">
             <div className="photo-heading">
@@ -2519,11 +2511,19 @@ function CreateListingPage({
                   ) => (
                     <div
                       className="preview-item"
-                      key={`${url}-${index}`}
+                      key={
+                        url +
+                        "-" +
+                        index
+                      }
                     >
                       <img
                         src={url}
-                        alt={`پیش‌نمایش ${index + 1}`}
+                        alt={
+                          "پیش‌نمایش " +
+                          (index +
+                            1)
+                        }
                       />
 
                       {index ===
@@ -3058,8 +3058,7 @@ function BottomNav({
       <button
         type="button"
         className={
-          page ===
-          "account"
+          page === "account"
             ? "active"
             : ""
         }
@@ -3083,13 +3082,21 @@ function BottomNav({
    START
 ========================================================= */
 
-createRoot(
+const rootElement =
   document.getElementById(
     "root"
-  )!
+  );
+
+if (!rootElement) {
+  throw new Error(
+    "Root element پیدا نشد."
+  );
+}
+
+createRoot(
+  rootElement
 ).render(
   <React.StrictMode>
     <App />
   </React.StrictMode>
 );
-```
