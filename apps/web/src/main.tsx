@@ -1,3 +1,4 @@
+```tsx
 import React, {
   useEffect,
   useRef,
@@ -1025,6 +1026,11 @@ function App() {
 
       /* ===================================================
          UPLOAD PHOTOS
+
+         IMPORTANT:
+         ImageKit token is single-use.
+         Therefore a NEW auth token is requested
+         for EVERY individual photo.
       =================================================== */
 
       if (
@@ -1035,15 +1041,23 @@ function App() {
           "در حال آماده‌سازی آپلود عکس‌ها..."
         );
 
-        const auth =
-          await getImageKitAuth();
-
         for (
           let index = 0;
           index <
           selectedFiles.length;
           index++
         ) {
+          setCreateMessage(
+            `در حال آماده‌سازی عکس ${index + 1} از ${selectedFiles.length}...`
+          );
+
+          /*
+            برای هر عکس یک توکن کاملاً جدید
+            از Worker دریافت می‌کنیم.
+          */
+          const auth =
+            await getImageKitAuth();
+
           setCreateMessage(
             `در حال آپلود عکس ${index + 1} از ${selectedFiles.length}...`
           );
@@ -3080,3 +3094,4 @@ createRoot(
     <App />
   </React.StrictMode>
 );
+```
