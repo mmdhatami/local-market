@@ -20,7 +20,7 @@ app.get("/", async (c) => {
     success: true,
     service: "local-market-api",
     message: "API دردونه با موفقیت فعال است",
-    version: "1.3.0"
+    version: "1.4.0"
   });
 });
 
@@ -82,7 +82,9 @@ app.get("/api/categories", async (c) => {
       success: true,
       categories: result.results
     });
-  } catch {
+  } catch (error) {
+    console.error("GET /api/categories error:", error);
+
     return c.json(
       {
         success: false,
@@ -94,8 +96,284 @@ app.get("/api/categories", async (c) => {
 });
 
 /* =========================================================
+   REGISTER USER
+========================================================= */
+
+app.post("/api/register", async (c) => {
+  if (!c.env.DB) {
+    return c.json(
+      {
+        success: false,
+        error: "Database is not configured"
+      },
+      500
+    );
+  }
+
+  try {
+    const body = await c.req.json();
+
+    const fullName =
+      body.full_name !== undefined
+        ? String(body.full_name).trim()
+        : "";
+
+    const mobile =
+      body.mobile !== undefined
+        ? String(body.mobile).trim()
+        : "";
+
+    const password =
+      body.password !== undefined
+        ? String(body.password)
+        : "";
+
+    /* -------------------------
+       Validation
+    ------------------------- */
+
+    if (!fullName || fullName.length < 2) {
+      return c.json(
+        {
+          success: false,
+          error: "نام و نام خانوادگی الزامی است"
+        },
+        400
+      );
+    }
+
+    if (!mobile || mobile.length < 8) {
+      return c.json(
+        {
+          success: false,
+          error: "شماره موبایل معتبر وارد کنید"
+        },
+        400
+      );
+    }
+
+    if (!password || password.length < 6) {
+      return c.json(
+        {
+          success: false,
+          error: "رمز عبور باید حداقل ۶ کاراکتر باشد"
+        },
+        400
+      );
+    }
+
+    /* -------------------------
+       Check existing mobile
+    ------------------------- */
+
+    const existingUser = await c.env.DB
+      .prepare(`
+        SELECT
+          id,
+          mobile
+        FROM app_users
+        WHERE mobile = ?
+        LIMIT 1
+      `)
+      .bind(mobile)
+      .first();
+
+    if (existingUser) {
+      return c.json(
+        {
+          success: false,
+          error: "این شماره موبایل قبلاً ثبت شده است"
+        },
+        409
+      );
+    }
+
+    /* -------------------------
+       Password hashing
+       PBKDF2 + SHA-256
+    ------------------------- */
+
+    const encoder = new TextEncoder();
+
+    const saltBytes = crypto.getRandomValues(
+      new Uint8Array(16)
+    );
+
+    const passwordKey = await crypto.subtle.importKey(
+      "raw",
+      encoder.encode(password),
+      {
+        name: "PBKDF2"
+      },
+      false,
+      ["deriveBits"]
+    );
+
+    const hashBuffer = await crypto.subtle.deriveBits(
+      {
+        name: "PBKDF2",
+        salt: saltBytes,
+        iterations: 100000,
+        hash: "SHA-256"
+      },
+      passwordKey,
+      256
+    );
+
+    const hashBytes = new Uint8Array(hashBuffer);
+
+    function bytesToHex(bytes: Uint8Array) {
+      return Array.from(bytes)
+        .map((byte) => byte.toString(16).padStart(2, "0"))
+        .join("");
+    }
+
+    const salt = bytesToHex(saltBytes);
+    const passwordHash = bytesToHex(hashBytes);
+
+    /*
+      ذخیره به شکل:
+      pbkdf2$salt$hash
+    */
+
+    const storedPassword =
+      `pbkdf2$${salt}$${passwordHash}`;
+
+    /* -------------------------
+       Create user ID
+    ------------------------- */
+
+    const userId = crypto.randomUUID();
+
+    /* -------------------------
+       Insert user
+    ------------------------- */
+
+    await c.env.DB
+      .prepare(`
+        INSERT INTO app_users (
+          id,
+          full_name,
+          mobile,
+          password_hash,
+          role,
+          phone_verified,
+          identity_verified,
+          business_verified,
+          is_blocked
+        )
+        VALUES (?, ?, ?, ?, 'user', 0, 0, 0, 0)
+      `)
+      .bind(
+        userId,
+        fullName,
+        mobile,
+        storedPassword
+      )
+      .run();
+
+    /* -------------------------
+       Response
+    ------------------------- */
+
+    return c.json(
+      {
+        success: true,
+        message: "حساب کاربری با موفقیت ایجاد شد",
+        user: {
+          id: userId,
+          full_name: fullName,
+          mobile,
+          role: "user",
+          phone_verified: false,
+          identity_verified: false,
+          business_verified: false
+        }
+      },
+      201
+    );
+  } catch (error) {
+    console.error("POST /api/register error:", error);
+
+    return c.json(
+      {
+        success: false,
+        error: "ثبت‌نام انجام نشد"
+      },
+      500
+    );
+  }
+});
+
+/* =========================================================
+   GET USER
+========================================================= */
+
+app.get("/api/users/:id", async (c) => {
+  if (!c.env.DB) {
+    return c.json(
+      {
+        success: false,
+        error: "Database is not configured"
+      },
+      500
+    );
+  }
+
+  const userId = c.req.param("id");
+
+  try {
+    const user = await c.env.DB
+      .prepare(`
+        SELECT
+          id,
+          full_name,
+          mobile,
+          role,
+          phone_verified,
+          identity_verified,
+          business_verified,
+          avatar_url,
+          bio,
+          is_blocked,
+          created_at,
+          updated_at
+        FROM app_users
+        WHERE id = ?
+        LIMIT 1
+      `)
+      .bind(userId)
+      .first();
+
+    if (!user) {
+      return c.json(
+        {
+          success: false,
+          error: "کاربر پیدا نشد"
+        },
+        404
+      );
+    }
+
+    return c.json({
+      success: true,
+      user
+    });
+  } catch (error) {
+    console.error("GET /api/users/:id error:", error);
+
+    return c.json(
+      {
+        success: false,
+        error: "خطا در دریافت اطلاعات کاربر"
+      },
+      500
+    );
+  }
+});
+
+/* =========================================================
    GET LISTINGS
-   همه آگهی‌ها
 ========================================================= */
 
 app.get("/api/listings", async (c) => {
@@ -310,7 +588,6 @@ app.get("/api/listings/:id", async (c) => {
 
 /* =========================================================
    CREATE LISTING
-   مرحله فعلی: API آماده ثبت آگهی
 ========================================================= */
 
 app.post("/api/listings", async (c) => {
@@ -343,10 +620,6 @@ app.post("/api/listings", async (c) => {
       expires_at = null
     } = body;
 
-    /* -------------------------
-       Validation
-    ------------------------- */
-
     if (!user_id) {
       return c.json(
         {
@@ -376,10 +649,6 @@ app.post("/api/listings", async (c) => {
         400
       );
     }
-
-    /* -------------------------
-       Check user
-    ------------------------- */
 
     const user = await c.env.DB
       .prepare(`
@@ -416,10 +685,6 @@ app.post("/api/listings", async (c) => {
       );
     }
 
-    /* -------------------------
-       Check category
-    ------------------------- */
-
     const category = await c.env.DB
       .prepare(`
         SELECT
@@ -446,15 +711,7 @@ app.post("/api/listings", async (c) => {
       );
     }
 
-    /* -------------------------
-       Generate listing ID
-    ------------------------- */
-
     const listingId = crypto.randomUUID();
-
-    /* -------------------------
-       Insert listing
-    ------------------------- */
 
     await c.env.DB
       .prepare(`
@@ -484,12 +741,15 @@ app.post("/api/listings", async (c) => {
         String(title).trim(),
         description ? String(description).trim() : null,
         String(listing_type),
-        price !== null && price !== "" ? Number(price) : null,
+        price !== null && price !== ""
+          ? Number(price)
+          : null,
         String(price_type),
         old_price !== null && old_price !== ""
           ? Number(old_price)
           : null,
-        discount_percent !== null && discount_percent !== ""
+        discount_percent !== null &&
+        discount_percent !== ""
           ? Number(discount_percent)
           : null,
         city ? String(city).trim() : null,
@@ -544,10 +804,12 @@ app.get("/api", (c) => {
     success: true,
     name: "دردونه",
     description: "بازار هوشمند محلی",
-    version: "1.3.0",
+    version: "1.4.0",
     endpoints: {
       health: "/api/health",
       categories: "/api/categories",
+      register: "/api/register",
+      users: "/api/users/:id",
       listings: "/api/listings"
     }
   });
