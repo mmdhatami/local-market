@@ -635,14 +635,12 @@ function App() {
     setListingLoading(true);
 
     try {
-      const data =
-        await apiFetch<{
-          success: boolean;
-          listing: Listing;
-          photos: ListingPhoto[];
-        }>(
-          `/api/listings/${listing.id}`
-        );
+     const data = await apiFetch<{
+  listing: Listing;
+  photos: ListingPhoto[];
+}>(
+  "/api/listings/" + listing.id
+);
 
       const photos =
         data.photos || [];
