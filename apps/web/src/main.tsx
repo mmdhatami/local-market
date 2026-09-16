@@ -103,9 +103,10 @@ function formatPrice(
     return "توافقی";
   }
 
-  return `${Number(price).toLocaleString(
-    "fa-IR"
-  )} تومان`;
+ return (
+  Number(price).toLocaleString("fa-IR") +
+  " تومان"
+);
 }
 
 function formatCondition(
