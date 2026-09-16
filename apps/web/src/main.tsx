@@ -175,7 +175,7 @@ async function apiFetch<T>(
   options?: RequestInit
 ): Promise<T> {
   const response = await fetch(
-    `${API_BASE_URL}${url}`,
+   API_BASE_URL + url,
     {
       ...options,
       headers: {
