@@ -243,8 +243,13 @@ app.post("/api/imagekit-auth", async (c) => {
 
     const token = crypto.randomUUID();
 
+    /*
+      ImageKit مقدار expire را باید کمتر از یک ساعت
+      در آینده ببیند.
+      برای اطمینان ۵۵ دقیقه تنظیم شده است.
+    */
     const expire =
-      Math.floor(Date.now() / 1000) + 60 * 60;
+      Math.floor(Date.now() / 1000) + 55 * 60;
 
     const signature =
       await createImageKitSignature(
