@@ -1,8 +1,15 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
 const API_BASE_URL = "";
+
+const MAX_PHOTOS = 8;
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 type Category = {
   id: string;
@@ -79,18 +86,30 @@ type Page =
   | "account"
   | "create";
 
-const MAX_PHOTOS = 8;
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
+/* =========================================================
+   HELPERS
+========================================================= */
 
-function formatPrice(price?: number | null) {
-  if (price === null || price === undefined || !Number.isFinite(Number(price))) {
+function formatPrice(
+  price?: number | null
+) {
+  if (
+    price === null ||
+    price === undefined ||
+    !Number.isFinite(Number(price)) ||
+    Number(price) <= 0
+  ) {
     return "توافقی";
   }
 
-  return `${Number(price).toLocaleString("fa-IR")} تومان`;
+  return `${Number(price).toLocaleString(
+    "fa-IR"
+  )} تومان`;
 }
 
-function formatCondition(condition?: string | null) {
+function formatCondition(
+  condition?: string | null
+) {
   if (!condition) return "";
 
   const values: Record<string, string> = {
@@ -99,33 +118,54 @@ function formatCondition(condition?: string | null) {
     like_new: "در حد نو",
   };
 
-  return values[condition] || condition;
+  return (
+    values[condition] ||
+    condition
+  );
 }
 
-function truncateText(text?: string | null, length = 90) {
+function truncateText(
+  text?: string | null,
+  length = 90
+) {
   if (!text) return "";
+
   return text.length > length
     ? `${text.slice(0, length)}…`
     : text;
 }
 
-function getUser(): User | null {
+function getStoredUser(): User | null {
   try {
-    const raw = localStorage.getItem("dardone_user");
+    const raw =
+      localStorage.getItem(
+        "dardone_user"
+      );
+
     if (!raw) return null;
+
     return JSON.parse(raw);
   } catch {
     return null;
   }
 }
 
-function setStoredUser(user: User) {
-  localStorage.setItem("dardone_user", JSON.stringify(user));
+function saveUser(user: User) {
+  localStorage.setItem(
+    "dardone_user",
+    JSON.stringify(user)
+  );
 }
 
-function removeStoredUser() {
-  localStorage.removeItem("dardone_user");
+function clearUser() {
+  localStorage.removeItem(
+    "dardone_user"
+  );
 }
+
+/* =========================================================
+   API
+========================================================= */
 
 async function apiFetch<T>(
   url: string,
@@ -136,22 +176,28 @@ async function apiFetch<T>(
     {
       ...options,
       headers: {
-        "Content-Type": "application/json",
+        "Content-Type":
+          "application/json",
         ...(options?.headers || {}),
       },
     }
   );
 
-  const text = await response.text();
+  const text =
+    await response.text();
 
   let data: any = {};
 
   try {
-    data = text ? JSON.parse(text) : {};
+    data = text
+      ? JSON.parse(text)
+      : {};
   } catch {
     data = {
       success: false,
-      error: text || "پاسخ نامعتبر از سرور",
+      error:
+        text ||
+        "پاسخ نامعتبر از سرور",
     };
   }
 
@@ -159,12 +205,16 @@ async function apiFetch<T>(
     throw new Error(
       data?.error ||
         data?.message ||
-        `خطای سرور (${response.status})`
+        `خطای سرور ${response.status}`
     );
   }
 
   return data as T;
 }
+
+/* =========================================================
+   IMAGEKIT
+========================================================= */
 
 async function getImageKitAuth() {
   return apiFetch<ImageKitAuth>(
@@ -180,41 +230,72 @@ async function uploadImageToImageKit(
   file: File,
   auth: ImageKitAuth
 ) {
-  const formData = new FormData();
+  const formData =
+    new FormData();
 
-  formData.append("file", file);
-  formData.append("fileName", file.name);
-  formData.append("publicKey", auth.publicKey);
-  formData.append("signature", auth.signature);
-  formData.append("expire", String(auth.expire));
-  formData.append("token", auth.token);
+  formData.append(
+    "file",
+    file
+  );
+
+  formData.append(
+    "fileName",
+    file.name
+  );
+
+  formData.append(
+    "publicKey",
+    auth.publicKey
+  );
+
+  formData.append(
+    "signature",
+    auth.signature
+  );
+
+  formData.append(
+    "expire",
+    String(auth.expire)
+  );
+
+  formData.append(
+    "token",
+    auth.token
+  );
 
   formData.append(
     "folder",
     "/dardone/listings"
   );
 
-  const response = await fetch(
-    "https://upload.imagekit.io/api/v1/files/upload",
-    {
-      method: "POST",
-      body: formData,
-    }
-  );
+  const response =
+    await fetch(
+      "https://upload.imagekit.io/api/v1/files/upload",
+      {
+        method: "POST",
+        body: formData,
+      }
+    );
 
-  const text = await response.text();
+  const text =
+    await response.text();
 
   let data: any = {};
 
   try {
-    data = text ? JSON.parse(text) : {};
+    data = text
+      ? JSON.parse(text)
+      : {};
   } catch {
     throw new Error(
       "پاسخ نامعتبر از ImageKit دریافت شد."
     );
   }
 
-  if (!response.ok || !data?.url) {
+  if (
+    !response.ok ||
+    !data?.url
+  ) {
     throw new Error(
       data?.message ||
         data?.error?.message ||
@@ -223,11 +304,17 @@ async function uploadImageToImageKit(
   }
 
   return {
-    fileId: data.fileId || "",
-    filePath: data.filePath || "",
+    fileId:
+      data.fileId || "",
+    filePath:
+      data.filePath || "",
     url: data.url,
   };
 }
+
+/* =========================================================
+   APP
+========================================================= */
 
 function App() {
   const [page, setPage] =
@@ -236,26 +323,46 @@ function App() {
   const [categories, setCategories] =
     useState<Category[]>([]);
 
-  const [selectedCategory, setSelectedCategory] =
-    useState<Category | null>(null);
+  const [
+    selectedCategory,
+    setSelectedCategory,
+  ] =
+    useState<Category | null>(
+      null
+    );
 
-  const [selectedListing, setSelectedListing] =
-    useState<Listing | null>(null);
+  const [
+    selectedListing,
+    setSelectedListing,
+  ] =
+    useState<Listing | null>(
+      null
+    );
 
   const [user, setUser] =
-    useState<User | null>(() => getUser());
+    useState<User | null>(
+      getStoredUser()
+    );
 
-  const [loadingCategories, setLoadingCategories] =
-    useState(true);
+  const [
+    loadingCategories,
+    setLoadingCategories,
+  ] = useState(true);
 
-  const [categoryListings, setCategoryListings] =
-    useState<Listing[]>([]);
+  const [
+    categoryListings,
+    setCategoryListings,
+  ] = useState<Listing[]>([]);
 
-  const [loadingListings, setLoadingListings] =
-    useState(false);
+  const [
+    loadingListings,
+    setLoadingListings,
+  ] = useState(false);
 
-  const [listingDetailsLoading, setListingDetailsLoading] =
-    useState(false);
+  const [
+    listingLoading,
+    setListingLoading,
+  ] = useState(false);
 
   const [error, setError] =
     useState("");
@@ -263,8 +370,15 @@ function App() {
   const [search, setSearch] =
     useState("");
 
-  const [accountMode, setAccountMode] =
-    useState<"register" | "login">("register");
+  /* ACCOUNT */
+
+  const [
+    accountMode,
+    setAccountMode,
+  ] =
+    useState<
+      "register" | "login"
+    >("register");
 
   const [fullName, setFullName] =
     useState("");
@@ -275,74 +389,101 @@ function App() {
   const [password, setPassword] =
     useState("");
 
-  const [repeatPassword, setRepeatPassword] =
-    useState("");
+  const [
+    repeatPassword,
+    setRepeatPassword,
+  ] = useState("");
 
-  const [accountLoading, setAccountLoading] =
-    useState(false);
+  const [
+    accountLoading,
+    setAccountLoading,
+  ] = useState(false);
 
-  const [accountMessage, setAccountMessage] =
-    useState("");
+  const [
+    accountMessage,
+    setAccountMessage,
+  ] = useState("");
+
+  /* CREATE LISTING */
 
   const [title, setTitle] =
     useState("");
 
-  const [description, setDescription] =
-    useState("");
+  const [
+    description,
+    setDescription,
+  ] = useState("");
 
   const [price, setPrice] =
     useState("");
 
-  const [priceType, setPriceType] =
-    useState("fixed");
+  const [
+    priceType,
+    setPriceType,
+  ] = useState("fixed");
 
   const [city, setCity] =
     useState("شهرکرد");
 
-  const [condition, setCondition] =
-    useState("new");
+  const [
+    condition,
+    setCondition,
+  ] = useState("new");
 
-  const [createLoading, setCreateLoading] =
-    useState(false);
+  const [
+    createLoading,
+    setCreateLoading,
+  ] = useState(false);
 
-  const [createMessage, setCreateMessage] =
-    useState("");
+  const [
+    createMessage,
+    setCreateMessage,
+  ] = useState("");
 
-  const [selectedFiles, setSelectedFiles] =
-    useState<File[]>([]);
+  /* PHOTOS */
 
-  const [previewUrls, setPreviewUrls] =
-    useState<string[]>([]);
+  const [
+    selectedFiles,
+    setSelectedFiles,
+  ] = useState<File[]>([]);
+
+  const [
+    previewUrls,
+    setPreviewUrls,
+  ] = useState<string[]>([]);
 
   const galleryInputRef =
-    useRef<HTMLInputElement | null>(null);
+    useRef<HTMLInputElement | null>(
+      null
+    );
 
   const cameraInputRef =
-    useRef<HTMLInputElement | null>(null);
+    useRef<HTMLInputElement | null>(
+      null
+    );
 
   useEffect(() => {
     loadCategories();
   }, []);
 
-  useEffect(() => {
-    return () => {
-      previewUrls.forEach((url) =>
-        URL.revokeObjectURL(url)
-      );
-    };
-  }, [previewUrls]);
+  /* =======================================================
+     LOAD CATEGORIES
+  ======================================================= */
 
   async function loadCategories() {
     try {
       setLoadingCategories(true);
       setError("");
 
-      const data = await apiFetch<{
-        success: boolean;
-        categories: Category[];
-      }>("/api/categories");
+      const data =
+        await apiFetch<{
+          success: boolean;
+          categories: Category[];
+        }>("/api/categories");
 
-      setCategories(data.categories || []);
+      setCategories(
+        data.categories || []
+      );
     } catch (err) {
       setError(
         err instanceof Error
@@ -354,6 +495,10 @@ function App() {
     }
   }
 
+  /* =======================================================
+     NAVIGATION
+  ======================================================= */
+
   function goHome() {
     setPage("home");
     setSelectedCategory(null);
@@ -361,43 +506,97 @@ function App() {
     setError("");
   }
 
-  async function openCategory(category: Category) {
-    setSelectedCategory(category);
-    setSelectedListing(null);
-    setPage("category");
-
-    await loadListings(category.id);
+  function openAccount() {
+    setPage("account");
+    setAccountMessage("");
+    setError("");
   }
 
-  function closeCategory() {
+  function closeAccount() {
     goHome();
   }
 
+  function openCreateListing() {
+    if (!user) {
+      setPage("account");
+
+      setAccountMessage(
+        "برای ثبت آگهی ابتدا وارد حساب کاربری شوید."
+      );
+
+      return;
+    }
+
+    setCreateMessage("");
+    setError("");
+    setPage("create");
+  }
+
+  function closeCreateListing() {
+    goHome();
+  }
+
+  /* =======================================================
+     CATEGORY
+  ======================================================= */
+
+  async function openCategory(
+    category: Category
+  ) {
+    setSelectedCategory(
+      category
+    );
+
+    setSelectedListing(null);
+
+    setSearch("");
+
+    setPage("category");
+
+    await loadListings(
+      category.id
+    );
+  }
+
   async function loadListings(
-    categoryId: string,
+    categoryId?: string,
     searchValue = ""
   ) {
     try {
       setLoadingListings(true);
       setError("");
 
-      const params = new URLSearchParams();
+      const params =
+        new URLSearchParams();
 
-      params.set("category_id", categoryId);
+      if (categoryId) {
+        params.set(
+          "category_id",
+          categoryId
+        );
+      }
 
-      if (searchValue.trim()) {
+      if (
+        searchValue.trim()
+      ) {
         params.set(
           "search",
           searchValue.trim()
         );
       }
 
-      const data = await apiFetch<{
-        success: boolean;
-        listings: Listing[];
-      }>(
-        `/api/listings?${params.toString()}`
-      );
+      const query =
+        params.toString();
+
+      const url = query
+        ? `/api/listings?${query}`
+        : "/api/listings";
+
+      const data =
+        await apiFetch<{
+          success: boolean;
+          listings: Listing[];
+        }>(url);
 
       setCategoryListings(
         data.listings || []
@@ -415,32 +614,49 @@ function App() {
     }
   }
 
-  async function openListing(listing: Listing) {
-    setSelectedListing(listing);
+  /* =======================================================
+     LISTING DETAIL
+  ======================================================= */
+
+  async function openListing(
+    listing: Listing
+  ) {
+    setSelectedListing(
+      listing
+    );
+
     setPage("listing");
-    setListingDetailsLoading(true);
+
+    setListingLoading(true);
 
     try {
-      const data = await apiFetch<{
-        success: boolean;
-        listing: Listing;
-        photos: ListingPhoto[];
-      }>(
-        `/api/listings/${listing.id}`
-      );
+      const data =
+        await apiFetch<{
+          success: boolean;
+          listing: Listing;
+          photos: ListingPhoto[];
+        }>(
+          `/api/listings/${listing.id}`
+        );
+
+      const photos =
+        data.photos || [];
 
       setSelectedListing({
         ...data.listing,
-        photos: data.photos || [],
+        photos,
         image_url:
-          data.photos?.[0]?.file_url ||
+          photos[0]?.file_url ||
           data.listing.image_url ||
           null,
       });
-    } catch {
-      setSelectedListing(listing);
+    } catch (err) {
+      console.error(
+        "Listing detail:",
+        err
+      );
     } finally {
-      setListingDetailsLoading(false);
+      setListingLoading(false);
     }
   }
 
@@ -452,281 +668,32 @@ function App() {
     }
   }
 
-  function openAccount() {
-    setPage("account");
-    setAccountMessage("");
-    setError("");
-  }
-
-  function closeAccount() {
-    goHome();
-  }
-
-  function openCreateListing() {
-    if (!user) {
-      setPage("account");
-      setAccountMessage(
-        "برای ثبت آگهی ابتدا وارد حساب کاربری شوید."
-      );
-      return;
-    }
-
-    setPage("create");
-    setCreateMessage("");
-    setError("");
-  }
-
-  function closeCreateListing() {
-    goHome();
-  }
+  /* =======================================================
+     ACCOUNT
+  ======================================================= */
 
   function handleRegisteredUser(
     registeredUser: User
   ) {
-    setUser(registeredUser);
-    setStoredUser(registeredUser);
+    setUser(
+      registeredUser
+    );
+
+    saveUser(
+      registeredUser
+    );
+
+    setAccountMessage("");
+
     setPage("home");
   }
 
   function logout() {
-    removeStoredUser();
+    clearUser();
+
     setUser(null);
+
     setPage("home");
-  }
-
-  function addSelectedFiles(
-    files: FileList | null
-  ) {
-    if (!files) return;
-
-    const incoming = Array.from(files);
-
-    if (
-      selectedFiles.length +
-        incoming.length >
-      MAX_PHOTOS
-    ) {
-      setCreateMessage(
-        `حداکثر ${MAX_PHOTOS} عکس می‌توانید انتخاب کنید.`
-      );
-      return;
-    }
-
-    const validFiles: File[] = [];
-
-    for (const file of incoming) {
-      if (!file.type.startsWith("image/")) {
-        setCreateMessage(
-          "فقط فایل‌های تصویری قابل انتخاب هستند."
-        );
-        continue;
-      }
-
-      if (file.size > MAX_FILE_SIZE) {
-        setCreateMessage(
-          `حجم عکس «${file.name}» بیشتر از ۱۰ مگابایت است.`
-        );
-        continue;
-      }
-
-      validFiles.push(file);
-    }
-
-    if (!validFiles.length) {
-      return;
-    }
-
-    const nextFiles = [
-      ...selectedFiles,
-      ...validFiles,
-    ];
-
-    const nextUrls = nextFiles.map((file) =>
-      URL.createObjectURL(file)
-    );
-
-    previewUrls.forEach((url) =>
-      URL.revokeObjectURL(url)
-    );
-
-    setSelectedFiles(nextFiles);
-    setPreviewUrls(nextUrls);
-    setCreateMessage("");
-  }
-
-  function removeSelectedFile(index: number) {
-    const nextFiles =
-      selectedFiles.filter(
-        (_, fileIndex) =>
-          fileIndex !== index
-      );
-
-    const nextUrls = nextFiles.map((file) =>
-      URL.createObjectURL(file)
-    );
-
-    previewUrls.forEach((url) =>
-      URL.revokeObjectURL(url)
-    );
-
-    setSelectedFiles(nextFiles);
-    setPreviewUrls(nextUrls);
-  }
-
-  async function submitListing(
-    event: React.FormEvent
-  ) {
-    event.preventDefault();
-
-    if (!user) {
-      setCreateMessage(
-        "ابتدا وارد حساب کاربری شوید."
-      );
-      return;
-    }
-
-    if (!selectedCategory) {
-      setCreateMessage(
-        "ابتدا یک دسته‌بندی انتخاب کنید."
-      );
-      return;
-    }
-
-    if (!title.trim()) {
-      setCreateMessage(
-        "عنوان آگهی را وارد کنید."
-      );
-      return;
-    }
-
-    if (!description.trim()) {
-      setCreateMessage(
-        "توضیحات آگهی را وارد کنید."
-      );
-      return;
-    }
-
-    try {
-      setCreateLoading(true);
-      setCreateMessage("");
-      setError("");
-
-      const listingResponse =
-        await apiFetch<{
-          success: boolean;
-          listing: Listing;
-        }>("/api/listings", {
-          method: "POST",
-          body: JSON.stringify({
-            user_id: user.id,
-            category_id:
-              selectedCategory.id,
-            title: title.trim(),
-            description:
-              description.trim(),
-            listing_type: "product",
-            price:
-              price.trim() === ""
-                ? null
-                : Number(price),
-            price_type: priceType,
-            city: city.trim(),
-            condition,
-          }),
-        });
-
-      const createdListing =
-        listingResponse.listing;
-
-      if (
-        selectedFiles.length > 0
-      ) {
-        setCreateMessage(
-          "آگهی ثبت شد؛ در حال آماده‌سازی عکس‌ها..."
-        );
-
-        const auth =
-          await getImageKitAuth();
-
-        for (
-          let index = 0;
-          index < selectedFiles.length;
-          index++
-        ) {
-          setCreateMessage(
-            `در حال آپلود عکس ${index + 1} از ${selectedFiles.length}...`
-          );
-
-          const uploaded =
-            await uploadImageToImageKit(
-              selectedFiles[index],
-              auth
-            );
-
-          await apiFetch(
-            `/api/listings/${createdListing.id}/photos`,
-            {
-              method: "POST",
-              body: JSON.stringify({
-                file_key:
-                  uploaded.filePath ||
-                  uploaded.fileId,
-                file_url:
-                  uploaded.url,
-                sort_order: index,
-              }),
-            }
-          );
-        }
-      }
-
-      setCreateMessage(
-        selectedFiles.length
-          ? "آگهی و عکس‌ها با موفقیت ثبت شدند."
-          : "آگهی با موفقیت ثبت شد."
-      );
-
-      setTitle("");
-      setDescription("");
-      setPrice("");
-      setPriceType("fixed");
-      setCondition("new");
-
-      previewUrls.forEach((url) =>
-        URL.revokeObjectURL(url)
-      );
-
-      setSelectedFiles([]);
-      setPreviewUrls([]);
-
-      const refreshed =
-        await apiFetch<{
-          success: boolean;
-          listing: Listing;
-          photos: ListingPhoto[];
-        }>(
-          `/api/listings/${createdListing.id}`
-        );
-
-      setSelectedListing({
-        ...refreshed.listing,
-        photos:
-          refreshed.photos || [],
-        image_url:
-          refreshed.photos?.[0]?.file_url ||
-          null,
-      });
-
-      setPage("listing");
-    } catch (err) {
-      setCreateMessage(
-        err instanceof Error
-          ? err.message
-          : "ثبت آگهی انجام نشد."
-      );
-    } finally {
-      setCreateLoading(false);
-    }
   }
 
   async function register(
@@ -735,7 +702,6 @@ function App() {
     event.preventDefault();
 
     setAccountMessage("");
-    setError("");
 
     if (!fullName.trim()) {
       setAccountMessage(
@@ -758,7 +724,10 @@ function App() {
       return;
     }
 
-    if (password !== repeatPassword) {
+    if (
+      password !==
+      repeatPassword
+    ) {
       setAccountMessage(
         "تکرار رمز عبور صحیح نیست."
       );
@@ -777,7 +746,8 @@ function App() {
           body: JSON.stringify({
             full_name:
               fullName.trim(),
-            mobile: mobile.trim(),
+            mobile:
+              mobile.trim(),
             password,
           }),
         });
@@ -798,192 +768,562 @@ function App() {
 
   function login() {
     setAccountMessage(
-      "ورود با شماره موبایل در مرحله بعدی فعال می‌شود."
+      "ورود با شماره موبایل در مرحله بعدی تکمیل می‌شود."
     );
   }
+
+  /* =======================================================
+     SEARCH
+  ======================================================= */
 
   async function submitSearch(
     event: React.FormEvent
   ) {
     event.preventDefault();
 
-    const value = search.trim();
+    const value =
+      search.trim();
 
     if (!value) {
+      if (selectedCategory) {
+        await loadListings(
+          selectedCategory.id
+        );
+      }
+
       return;
     }
 
     if (selectedCategory) {
       setPage("category");
+
       await loadListings(
         selectedCategory.id,
         value
       );
+
       return;
     }
 
-    try {
-      setLoadingListings(true);
+    setPage("category");
 
-      const data =
-        await apiFetch<{
-          success: boolean;
-          listings: Listing[];
-        }>(
-          `/api/listings?search=${encodeURIComponent(
-            value
-          )}`
+    await loadListings(
+      undefined,
+      value
+    );
+
+    setSelectedCategory(
+      null
+    );
+  }
+
+  /* =======================================================
+     PHOTO SELECTION
+  ======================================================= */
+
+  function addSelectedFiles(
+    files: FileList | null
+  ) {
+    if (!files) return;
+
+    const incoming =
+      Array.from(files);
+
+    if (
+      selectedFiles.length +
+        incoming.length >
+      MAX_PHOTOS
+    ) {
+      setCreateMessage(
+        `حداکثر ${MAX_PHOTOS} عکس می‌توانید انتخاب کنید.`
+      );
+
+      return;
+    }
+
+    const validFiles: File[] =
+      [];
+
+    for (const file of incoming) {
+      if (
+        !file.type.startsWith(
+          "image/"
+        )
+      ) {
+        setCreateMessage(
+          "فقط فایل‌های تصویری قابل انتخاب هستند."
         );
 
-      setCategoryListings(
-        data.listings || []
+        continue;
+      }
+
+      if (
+        file.size >
+        MAX_FILE_SIZE
+      ) {
+        setCreateMessage(
+          `حجم عکس «${file.name}» بیشتر از ۱۰ مگابایت است.`
+        );
+
+        continue;
+      }
+
+      validFiles.push(file);
+    }
+
+    if (!validFiles.length) {
+      return;
+    }
+
+    const combinedFiles = [
+      ...selectedFiles,
+      ...validFiles,
+    ];
+
+    const combinedUrls =
+      combinedFiles.map(
+        (file) =>
+          URL.createObjectURL(
+            file
+          )
       );
 
-      setPage("category");
-      setSelectedCategory(null);
+    setSelectedFiles(
+      combinedFiles
+    );
+
+    setPreviewUrls(
+      combinedUrls
+    );
+
+    setCreateMessage("");
+  }
+
+  function removeSelectedFile(
+    index: number
+  ) {
+    const files =
+      selectedFiles.filter(
+        (_, i) =>
+          i !== index
+      );
+
+    const urls =
+      files.map((file) =>
+        URL.createObjectURL(
+          file
+        )
+      );
+
+    setSelectedFiles(files);
+
+    setPreviewUrls(urls);
+  }
+
+  /* =======================================================
+     CREATE LISTING
+  ======================================================= */
+
+  async function submitListing(
+    event: React.FormEvent
+  ) {
+    event.preventDefault();
+
+    if (!user) {
+      setCreateMessage(
+        "ابتدا وارد حساب کاربری شوید."
+      );
+
+      return;
+    }
+
+    if (!selectedCategory) {
+      setCreateMessage(
+        "یک دسته‌بندی انتخاب کنید."
+      );
+
+      return;
+    }
+
+    if (!title.trim()) {
+      setCreateMessage(
+        "عنوان آگهی را وارد کنید."
+      );
+
+      return;
+    }
+
+    if (
+      title.trim().length <
+      3
+    ) {
+      setCreateMessage(
+        "عنوان آگهی باید حداقل ۳ کاراکتر باشد."
+      );
+
+      return;
+    }
+
+    if (!description.trim()) {
+      setCreateMessage(
+        "توضیحات آگهی را وارد کنید."
+      );
+
+      return;
+    }
+
+    let createdListing:
+      | Listing
+      | null = null;
+
+    try {
+      setCreateLoading(true);
+
+      setCreateMessage(
+        "در حال ثبت آگهی..."
+      );
+
+      const listingResponse =
+        await apiFetch<{
+          success: boolean;
+          listing: Listing;
+        }>("/api/listings", {
+          method: "POST",
+          body: JSON.stringify({
+            user_id:
+              user.id,
+
+            category_id:
+              selectedCategory.id,
+
+            title:
+              title.trim(),
+
+            description:
+              description.trim(),
+
+            listing_type:
+              "product",
+
+            price:
+              price.trim()
+                ? Number(price)
+                : null,
+
+            price_type:
+              priceType,
+
+            city:
+              city.trim(),
+
+            condition,
+          }),
+        });
+
+      createdListing =
+        listingResponse.listing;
+
+      /* ===================================================
+         UPLOAD PHOTOS
+      =================================================== */
+
+      if (
+        selectedFiles.length >
+        0
+      ) {
+        setCreateMessage(
+          "در حال آماده‌سازی آپلود عکس‌ها..."
+        );
+
+        const auth =
+          await getImageKitAuth();
+
+        for (
+          let index = 0;
+          index <
+          selectedFiles.length;
+          index++
+        ) {
+          setCreateMessage(
+            `در حال آپلود عکس ${index + 1} از ${selectedFiles.length}...`
+          );
+
+          const uploaded =
+            await uploadImageToImageKit(
+              selectedFiles[index],
+              auth
+            );
+
+          await apiFetch(
+            `/api/listings/${createdListing.id}/photos`,
+            {
+              method:
+                "POST",
+
+              body:
+                JSON.stringify({
+                  file_key:
+                    uploaded.filePath ||
+                    uploaded.fileId,
+
+                  file_url:
+                    uploaded.url,
+
+                  sort_order:
+                    index,
+                }),
+            }
+          );
+        }
+      }
+
+      setCreateMessage(
+        selectedFiles.length >
+          0
+          ? "آگهی و عکس‌ها با موفقیت ثبت شدند."
+          : "آگهی با موفقیت ثبت شد."
+      );
+
+      /* ===================================================
+         GET FINAL LISTING
+      =================================================== */
+
+      const finalData =
+        await apiFetch<{
+          success: boolean;
+          listing: Listing;
+          photos: ListingPhoto[];
+        }>(
+          `/api/listings/${createdListing.id}`
+        );
+
+      const photos =
+        finalData.photos ||
+        [];
+
+      setSelectedListing({
+        ...finalData.listing,
+        photos,
+        image_url:
+          photos[0]?.file_url ||
+          null,
+      });
+
+      /* RESET FORM */
+
+      setTitle("");
+      setDescription("");
+      setPrice("");
+      setPriceType("fixed");
+      setCondition("new");
+
+      setSelectedFiles([]);
+      setPreviewUrls([]);
+
+      setPage("listing");
     } catch (err) {
-      setError(
+      console.error(
+        "Create listing:",
+        err
+      );
+
+      setCreateMessage(
         err instanceof Error
           ? err.message
-          : "جستجو انجام نشد."
+          : "ثبت آگهی انجام نشد."
       );
     } finally {
-      setLoadingListings(false);
+      setCreateLoading(false);
     }
   }
 
+  /* =======================================================
+     RENDER
+  ======================================================= */
+
   return (
-    <div className="app-shell" dir="rtl">
-      <header className="topbar">
-        <button
-          className="brand"
-          onClick={goHome}
-          type="button"
-        >
-          <span className="brand-mark">
-            د
-          </span>
-
-          <span>
-            <strong>دردونه</strong>
-            <small>بازار محلی شما</small>
-          </span>
-        </button>
-
-        <div className="topbar-actions">
-          <button
-            className="location-button"
-            type="button"
-          >
-            📍 شهرکرد
-          </button>
-
-          <button
-            className="account-button"
-            onClick={openAccount}
-            type="button"
-          >
-            {user
-              ? `👤 ${user.full_name}`
-              : "👤 حساب من"}
-          </button>
-        </div>
-      </header>
+    <div
+      className="app-shell"
+      dir="rtl"
+    >
+      <Header
+        user={user}
+        goHome={goHome}
+        openAccount={
+          openAccount
+        }
+      />
 
       <main>
         {page === "home" && (
           <HomePage
             search={search}
-            setSearch={setSearch}
-            onSearch={submitSearch}
-            categories={categories}
+            setSearch={
+              setSearch
+            }
+            onSearch={
+              submitSearch
+            }
+            categories={
+              categories
+            }
             loadingCategories={
               loadingCategories
             }
-            openCategory={openCategory}
+            openCategory={
+              openCategory
+            }
             openCreateListing={
               openCreateListing
             }
           />
         )}
 
-        {page === "category" && (
+        {page ===
+          "category" && (
           <CategoryPage
-            category={selectedCategory}
-            listings={categoryListings}
-            loading={loadingListings}
+            category={
+              selectedCategory
+            }
+            listings={
+              categoryListings
+            }
+            loading={
+              loadingListings
+            }
             search={search}
-            setSearch={setSearch}
-            onSearch={submitSearch}
+            setSearch={
+              setSearch
+            }
+            onSearch={
+              submitSearch
+            }
             onBack={goHome}
-            openListing={openListing}
+            openListing={
+              openListing
+            }
             openCreateListing={
               openCreateListing
             }
           />
         )}
 
-        {page === "listing" &&
+        {page ===
+          "listing" &&
           selectedListing && (
             <ListingDetailPage
-              listing={selectedListing}
-              loading={
-                listingDetailsLoading
+              listing={
+                selectedListing
               }
-              onBack={closeListing}
+              loading={
+                listingLoading
+              }
+              onBack={
+                closeListing
+              }
             />
           )}
 
-        {page === "account" && (
+        {page ===
+          "account" && (
           <AccountPage
             user={user}
-            mode={accountMode}
-            setMode={setAccountMode}
-            fullName={fullName}
-            setFullName={setFullName}
-            mobile={mobile}
-            setMobile={setMobile}
-            password={password}
-            setPassword={setPassword}
+            mode={
+              accountMode
+            }
+            setMode={
+              setAccountMode
+            }
+            fullName={
+              fullName
+            }
+            setFullName={
+              setFullName
+            }
+            mobile={
+              mobile
+            }
+            setMobile={
+              setMobile
+            }
+            password={
+              password
+            }
+            setPassword={
+              setPassword
+            }
             repeatPassword={
               repeatPassword
             }
             setRepeatPassword={
               setRepeatPassword
             }
-            loading={accountLoading}
-            message={accountMessage}
-            onRegister={register}
-            onLogin={login}
-            onLogout={logout}
-            onBack={closeAccount}
+            loading={
+              accountLoading
+            }
+            message={
+              accountMessage
+            }
+            onRegister={
+              register
+            }
+            onLogin={
+              login
+            }
+            onLogout={
+              logout
+            }
+            onBack={
+              closeAccount
+            }
           />
         )}
 
-        {page === "create" && (
+        {page ===
+          "create" && (
           <CreateListingPage
             selectedCategory={
               selectedCategory
             }
-            categories={categories}
+            categories={
+              categories
+            }
             title={title}
-            setTitle={setTitle}
-            description={description}
+            setTitle={
+              setTitle
+            }
+            description={
+              description
+            }
             setDescription={
               setDescription
             }
             price={price}
-            setPrice={setPrice}
-            priceType={priceType}
-            setPriceType={setPriceType}
+            setPrice={
+              setPrice
+            }
+            priceType={
+              priceType
+            }
+            setPriceType={
+              setPriceType
+            }
             city={city}
-            setCity={setCity}
-            condition={condition}
-            setCondition={setCondition}
+            setCity={
+              setCity
+            }
+            condition={
+              condition
+            }
+            setCondition={
+              setCondition
+            }
             selectedFiles={
               selectedFiles
             }
-            previewUrls={previewUrls}
+            previewUrls={
+              previewUrls
+            }
             galleryInputRef={
               galleryInputRef
             }
@@ -996,17 +1336,25 @@ function App() {
             onRemoveFile={
               removeSelectedFile
             }
-            loading={createLoading}
-            message={createMessage}
-            onSubmit={submitListing}
-            onBack={closeCreateListing}
+            loading={
+              createLoading
+            }
+            message={
+              createMessage
+            }
+            onSubmit={
+              submitListing
+            }
+            onBack={
+              closeCreateListing
+            }
             onCategoryChange={(
               category
-            ) => {
+            ) =>
               setSelectedCategory(
                 category
-              );
-            }}
+              )
+            }
           />
         )}
       </main>
@@ -1014,7 +1362,9 @@ function App() {
       <BottomNav
         page={page}
         goHome={goHome}
-        openAccount={openAccount}
+        openAccount={
+          openAccount
+        }
         openCreateListing={
           openCreateListing
         }
@@ -1022,16 +1372,80 @@ function App() {
 
       {error && (
         <div className="toast-error">
-          {error}
+          <span>
+            {error}
+          </span>
+
           <button
             type="button"
-            onClick={() => setError("")}
+            onClick={() =>
+              setError("")
+            }
           >
             ×
           </button>
         </div>
       )}
     </div>
+  );
+}
+
+/* =========================================================
+   HEADER
+========================================================= */
+
+function Header({
+  user,
+  goHome,
+  openAccount,
+}: {
+  user: User | null;
+  goHome: () => void;
+  openAccount: () => void;
+}) {
+  return (
+    <header className="topbar">
+      <button
+        className="brand"
+        onClick={goHome}
+        type="button"
+      >
+        <span className="brand-mark">
+          د
+        </span>
+
+        <span>
+          <strong>
+            دردونه
+          </strong>
+
+          <small>
+            بازار محلی شما
+          </small>
+        </span>
+      </button>
+
+      <div className="topbar-actions">
+        <button
+          className="location-button"
+          type="button"
+        >
+          📍 شهرکرد
+        </button>
+
+        <button
+          className="account-button"
+          onClick={
+            openAccount
+          }
+          type="button"
+        >
+          {user
+            ? `👤 ${user.full_name}`
+            : "👤 حساب من"}
+        </button>
+      </div>
+    </header>
   );
 }
 
@@ -1049,7 +1463,9 @@ function HomePage({
   openCreateListing,
 }: {
   search: string;
-  setSearch: (value: string) => void;
+  setSearch: (
+    value: string
+  ) => void;
   onSearch: (
     event: React.FormEvent
   ) => void;
@@ -1075,21 +1491,29 @@ function HomePage({
           </h1>
 
           <p>
-            خرید، فروش، خدمات و کسب‌وکارهای
-            شهر خودت را در دردونه پیدا کن.
+            خرید، فروش، خدمات و
+            کسب‌وکارهای شهر خودت را
+            در دردونه پیدا کن.
           </p>
 
           <form
             className="search-box"
-            onSubmit={onSearch}
+            onSubmit={
+              onSearch
+            }
           >
-            <span>🔎</span>
+            <span>
+              🔎
+            </span>
 
             <input
               value={search}
-              onChange={(event) =>
+              onChange={(
+                event
+              ) =>
                 setSearch(
-                  event.target.value
+                  event.target
+                    .value
                 )
               }
               placeholder="چی می‌خوای پیدا کنی؟"
@@ -1103,7 +1527,9 @@ function HomePage({
           <button
             className="primary-button hero-action"
             type="button"
-            onClick={openCreateListing}
+            onClick={
+              openCreateListing
+            }
           >
             ➕ ثبت آگهی رایگان
           </button>
@@ -1117,7 +1543,10 @@ function HomePage({
       <section className="section">
         <div className="section-heading">
           <div>
-            <span>دسته‌بندی‌ها</span>
+            <span>
+              دسته‌بندی‌ها
+            </span>
+
             <h2>
               چی می‌خوای؟
             </h2>
@@ -1126,15 +1555,20 @@ function HomePage({
 
         {loadingCategories ? (
           <div className="loading-box">
-            در حال دریافت دسته‌بندی‌ها...
+            در حال دریافت
+            دسته‌بندی‌ها...
           </div>
         ) : (
           <div className="category-grid">
             {categories.map(
-              (category) => (
+              (
+                category
+              ) => (
                 <button
                   className="category-card"
-                  key={category.id}
+                  key={
+                    category.id
+                  }
                   onClick={() =>
                     openCategory(
                       category
@@ -1148,7 +1582,9 @@ function HomePage({
                   </span>
 
                   <strong>
-                    {category.title}
+                    {
+                      category.title
+                    }
                   </strong>
 
                   <span className="category-arrow">
@@ -1177,7 +1613,7 @@ function HomePage({
         <Feature
           icon="🛡️"
           title="امن و مطمئن"
-          text="احراز هویت و امکانات امنیتی در مسیر توسعه."
+          text="امکانات امنیتی و احراز هویت در مسیر توسعه."
         />
       </section>
     </div>
@@ -1185,7 +1621,7 @@ function HomePage({
 }
 
 /* =========================================================
-   CATEGORY
+   CATEGORY PAGE
 ========================================================= */
 
 function CategoryPage({
@@ -1203,7 +1639,9 @@ function CategoryPage({
   listings: Listing[];
   loading: boolean;
   search: string;
-  setSearch: (value: string) => void;
+  setSearch: (
+    value: string
+  ) => void;
   onSearch: (
     event: React.FormEvent
   ) => void;
@@ -1226,7 +1664,9 @@ function CategoryPage({
 
         <button
           className="primary-button small"
-          onClick={openCreateListing}
+          onClick={
+            openCreateListing
+          }
           type="button"
         >
           + ثبت آگهی
@@ -1235,11 +1675,14 @@ function CategoryPage({
 
       <section className="category-header">
         <span className="big-icon">
-          {category?.icon || "📦"}
+          {category?.icon ||
+            "📦"}
         </span>
 
         <div>
-          <span>دسته‌بندی</span>
+          <span>
+            دسته‌بندی
+          </span>
 
           <h1>
             {category?.title ||
@@ -1250,15 +1693,22 @@ function CategoryPage({
 
       <form
         className="search-box compact"
-        onSubmit={onSearch}
+        onSubmit={
+          onSearch
+        }
       >
-        <span>🔎</span>
+        <span>
+          🔎
+        </span>
 
         <input
           value={search}
-          onChange={(event) =>
+          onChange={(
+            event
+          ) =>
             setSearch(
-              event.target.value
+              event.target
+                .value
             )
           }
           placeholder="جستجو در آگهی‌ها..."
@@ -1271,22 +1721,30 @@ function CategoryPage({
 
       {loading ? (
         <div className="loading-box">
-          در حال دریافت آگهی‌ها...
+          در حال دریافت
+          آگهی‌ها...
         </div>
-      ) : listings.length === 0 ? (
+      ) : listings.length ===
+        0 ? (
         <div className="empty-box">
-          <span>📭</span>
+          <span>
+            📭
+          </span>
+
           <h3>
             هنوز آگهی‌ای ثبت نشده
           </h3>
+
           <p>
-            اولین آگهی این بخش را شما ثبت
-            کنید.
+            اولین آگهی این بخش را
+            شما ثبت کنید.
           </p>
 
           <button
             className="primary-button"
-            onClick={openCreateListing}
+            onClick={
+              openCreateListing
+            }
             type="button"
           >
             ثبت اولین آگهی
@@ -1295,10 +1753,16 @@ function CategoryPage({
       ) : (
         <div className="listing-grid">
           {listings.map(
-            (listing) => (
+            (
+              listing
+            ) => (
               <ListingCard
-                key={listing.id}
-                listing={listing}
+                key={
+                  listing.id
+                }
+                listing={
+                  listing
+                }
                 onClick={() =>
                   openListing(
                     listing
@@ -1333,12 +1797,18 @@ function ListingCard({
       <div className="listing-image">
         {listing.image_url ? (
           <img
-            src={listing.image_url}
-            alt={listing.title}
+            src={
+              listing.image_url
+            }
+            alt={
+              listing.title
+            }
             loading="lazy"
           />
         ) : (
-          <span>📦</span>
+          <span>
+            📦
+          </span>
         )}
       </div>
 
@@ -1369,7 +1839,10 @@ function ListingCard({
 
           {listing.city && (
             <span>
-              📍 {listing.city}
+              📍{" "}
+              {
+                listing.city
+              }
             </span>
           )}
         </div>
@@ -1401,13 +1874,15 @@ function ListingDetailPage({
 }) {
   const photos =
     listing.photos &&
-    listing.photos.length
+    listing.photos.length >
+      0
       ? listing.photos
       : listing.image_url
       ? [
           {
             id: "single",
-            listing_id: listing.id,
+            listing_id:
+              listing.id,
             file_key: "",
             file_url:
               listing.image_url,
@@ -1415,6 +1890,15 @@ function ListingDetailPage({
           },
         ]
       : [];
+
+  const [
+    activePhoto,
+    setActivePhoto,
+  ] = useState(0);
+
+  useEffect(() => {
+    setActivePhoto(0);
+  }, [listing.id]);
 
   return (
     <div className="page">
@@ -1434,24 +1918,69 @@ function ListingDetailPage({
 
       <section className="listing-detail">
         <div className="detail-gallery">
-          {photos.length > 0 ? (
+          {photos.length >
+          0 ? (
             <>
               <div className="main-photo">
                 <img
-                  src={photos[0].file_url}
-                  alt={listing.title}
+                  src={
+                    photos[
+                      activePhoto
+                    ]?.file_url ||
+                    photos[0]
+                      .file_url
+                  }
+                  alt={
+                    listing.title
+                  }
                 />
+
+                {photos.length >
+                  1 && (
+                  <span className="photo-count">
+                    📷{" "}
+                    {activePhoto +
+                      1}{" "}
+                    /{" "}
+                    {
+                      photos.length
+                    }
+                  </span>
+                )}
               </div>
 
-              {photos.length > 1 && (
+              {photos.length >
+                1 && (
                 <div className="thumbnail-grid">
                   {photos.map(
-                    (photo) => (
-                      <img
-                        key={photo.id}
-                        src={photo.id}
-                        alt=""
-                      />
+                    (
+                      photo,
+                      index
+                    ) => (
+                      <button
+                        type="button"
+                        key={
+                          photo.id
+                        }
+                        className={
+                          index ===
+                          activePhoto
+                            ? "thumbnail active"
+                            : "thumbnail"
+                        }
+                        onClick={() =>
+                          setActivePhoto(
+                            index
+                          )
+                        }
+                      >
+                        <img
+                          src={
+                            photo.file_url
+                          }
+                          alt={`${listing.title} ${index + 1}`}
+                        />
+                      </button>
                     )
                   )}
                 </div>
@@ -1484,7 +2013,10 @@ function ListingDetailPage({
 
           {listing.city && (
             <div className="detail-meta">
-              📍 {listing.city}
+              📍{" "}
+              {
+                listing.city
+              }
             </div>
           )}
 
@@ -1530,7 +2062,7 @@ function ListingDetailPage({
 }
 
 /* =========================================================
-   CREATE LISTING
+   CREATE LISTING PAGE
 ========================================================= */
 
 function CreateListingPage({
@@ -1563,19 +2095,25 @@ function CreateListingPage({
   selectedCategory: Category | null;
   categories: Category[];
   title: string;
-  setTitle: (value: string) => void;
+  setTitle: (
+    value: string
+  ) => void;
   description: string;
   setDescription: (
     value: string
   ) => void;
   price: string;
-  setPrice: (value: string) => void;
+  setPrice: (
+    value: string
+  ) => void;
   priceType: string;
   setPriceType: (
     value: string
   ) => void;
   city: string;
-  setCity: (value: string) => void;
+  setCity: (
+    value: string
+  ) => void;
   condition: string;
   setCondition: (
     value: string
@@ -1614,16 +2152,26 @@ function CreateListingPage({
 
       <section className="form-card">
         <div className="form-heading">
-          <span>📢</span>
+          <span>
+            📢
+          </span>
+
           <div>
-            <span>رایگان</span>
+            <span>
+              رایگان
+            </span>
+
             <h1>
               ثبت آگهی
             </h1>
           </div>
         </div>
 
-        <form onSubmit={onSubmit}>
+        <form
+          onSubmit={
+            onSubmit
+          }
+        >
           <label className="field">
             <span>
               دسته‌بندی
@@ -1631,17 +2179,26 @@ function CreateListingPage({
 
             <select
               value={
-                selectedCategory?.id || ""
+                selectedCategory?.id ||
+                ""
               }
-              onChange={(event) => {
+              onChange={(
+                event
+              ) => {
                 const category =
                   categories.find(
-                    (item) =>
+                    (
+                      item
+                    ) =>
                       item.id ===
-                      event.target.value
+                      event
+                        .target
+                        .value
                   );
 
-                if (category) {
+                if (
+                  category
+                ) {
                   onCategoryChange(
                     category
                   );
@@ -1653,13 +2210,22 @@ function CreateListingPage({
               </option>
 
               {categories.map(
-                (category) => (
+                (
+                  category
+                ) => (
                   <option
-                    key={category.id}
-                    value={category.id}
+                    key={
+                      category.id
+                    }
+                    value={
+                      category.id
+                    }
                   >
-                    {category.icon || "📦"}{" "}
-                    {category.title}
+                    {category.icon ||
+                      "📦"}{" "}
+                    {
+                      category.title
+                    }
                   </option>
                 )
               )}
@@ -1673,9 +2239,12 @@ function CreateListingPage({
 
             <input
               value={title}
-              onChange={(event) =>
+              onChange={(
+                event
+              ) =>
                 setTitle(
-                  event.target.value
+                  event.target
+                    .value
                 )
               }
               placeholder="مثلاً گوشی سامسونگ..."
@@ -1688,10 +2257,15 @@ function CreateListingPage({
             </span>
 
             <textarea
-              value={description}
-              onChange={(event) =>
+              value={
+                description
+              }
+              onChange={(
+                event
+              ) =>
                 setDescription(
-                  event.target.value
+                  event.target
+                    .value
                 )
               }
               placeholder="توضیحات کامل آگهی را بنویسید..."
@@ -1707,9 +2281,12 @@ function CreateListingPage({
 
               <input
                 value={price}
-                onChange={(event) =>
+                onChange={(
+                  event
+                ) =>
                   setPrice(
-                    event.target.value
+                    event.target
+                      .value
                   )
                 }
                 inputMode="numeric"
@@ -1723,16 +2300,22 @@ function CreateListingPage({
               </span>
 
               <select
-                value={priceType}
-                onChange={(event) =>
+                value={
+                  priceType
+                }
+                onChange={(
+                  event
+                ) =>
                   setPriceType(
-                    event.target.value
+                    event.target
+                      .value
                   )
                 }
               >
                 <option value="fixed">
                   قیمت ثابت
                 </option>
+
                 <option value="negotiable">
                   قابل مذاکره
                 </option>
@@ -1748,9 +2331,12 @@ function CreateListingPage({
 
               <input
                 value={city}
-                onChange={(event) =>
+                onChange={(
+                  event
+                ) =>
                   setCity(
-                    event.target.value
+                    event.target
+                      .value
                   )
                 }
                 placeholder="شهر"
@@ -1763,19 +2349,26 @@ function CreateListingPage({
               </span>
 
               <select
-                value={condition}
-                onChange={(event) =>
+                value={
+                  condition
+                }
+                onChange={(
+                  event
+                ) =>
                   setCondition(
-                    event.target.value
+                    event.target
+                      .value
                   )
                 }
               >
                 <option value="new">
                   نو
                 </option>
+
                 <option value="like_new">
                   در حد نو
                 </option>
+
                 <option value="used">
                   کارکرده
                 </option>
@@ -1783,20 +2376,29 @@ function CreateListingPage({
             </label>
           </div>
 
+          {/* =================================================
+              PHOTOS
+          ================================================= */}
+
           <div className="photo-upload-section">
             <div className="photo-heading">
               <div>
                 <strong>
                   📸 عکس‌های آگهی
                 </strong>
+
                 <small>
-                  تا {MAX_PHOTOS} عکس، حداکثر
-                  ۱۰ مگابایت برای هر عکس
+                  حداکثر{" "}
+                  {MAX_PHOTOS}{" "}
+                  عکس، هر عکس تا ۱۰ مگابایت
                 </small>
               </div>
 
               <span>
-                {selectedFiles.length}/
+                {
+                  selectedFiles.length
+                }
+                /
                 {MAX_PHOTOS}
               </span>
             </div>
@@ -1805,74 +2407,104 @@ function CreateListingPage({
               <button
                 type="button"
                 className="photo-button"
-                onClick={() =>
-                  cameraInputRef.current?.click()
-                }
                 disabled={
                   loading ||
                   selectedFiles.length >=
                     MAX_PHOTOS
                 }
+                onClick={() =>
+                  cameraInputRef.current?.click()
+                }
               >
-                📷
                 <span>
-                  دوربین
+                  📷
                 </span>
+
+                <strong>
+                  دوربین
+                </strong>
+
+                <small>
+                  گرفتن عکس جدید
+                </small>
               </button>
 
               <button
                 type="button"
                 className="photo-button"
-                onClick={() =>
-                  galleryInputRef.current?.click()
-                }
                 disabled={
                   loading ||
                   selectedFiles.length >=
                     MAX_PHOTOS
                 }
+                onClick={() =>
+                  galleryInputRef.current?.click()
+                }
               >
-                🖼️
                 <span>
-                  گالری
+                  🖼️
                 </span>
+
+                <strong>
+                  گالری
+                </strong>
+
+                <small>
+                  انتخاب از گوشی
+                </small>
               </button>
             </div>
 
             <input
-              ref={cameraInputRef}
+              ref={
+                cameraInputRef
+              }
               type="file"
               accept="image/*"
               capture="environment"
               hidden
-              onChange={(event) => {
+              onChange={(
+                event
+              ) => {
                 onFilesSelected(
-                  event.target.files
+                  event.currentTarget
+                    .files
                 );
+
                 event.currentTarget.value =
                   "";
               }}
             />
 
             <input
-              ref={galleryInputRef}
+              ref={
+                galleryInputRef
+              }
               type="file"
               accept="image/*"
               multiple
               hidden
-              onChange={(event) => {
+              onChange={(
+                event
+              ) => {
                 onFilesSelected(
-                  event.target.files
+                  event.currentTarget
+                    .files
                 );
+
                 event.currentTarget.value =
                   "";
               }}
             />
 
-            {previewUrls.length > 0 && (
+            {previewUrls.length >
+              0 && (
               <div className="preview-grid">
                 {previewUrls.map(
-                  (url, index) => (
+                  (
+                    url,
+                    index
+                  ) => (
                     <div
                       className="preview-item"
                       key={`${url}-${index}`}
@@ -1882,7 +2514,8 @@ function CreateListingPage({
                         alt={`پیش‌نمایش ${index + 1}`}
                       />
 
-                      {index === 0 && (
+                      {index ===
+                        0 && (
                         <span className="main-photo-label">
                           عکس اصلی
                         </span>
@@ -1909,14 +2542,18 @@ function CreateListingPage({
 
           {message && (
             <div className="form-message">
-              {message}
+              {
+                message
+              }
             </div>
           )}
 
           <button
             className="primary-button submit-listing"
             type="submit"
-            disabled={loading}
+            disabled={
+              loading
+            }
           >
             {loading
               ? "در حال ثبت..."
@@ -1952,9 +2589,13 @@ function AccountPage({
   onBack,
 }: {
   user: User | null;
-  mode: "register" | "login";
+  mode:
+    | "register"
+    | "login";
   setMode: (
-    mode: "register" | "login"
+    mode:
+      | "register"
+      | "login"
   ) => void;
   fullName: string;
   setFullName: (
@@ -1994,12 +2635,15 @@ function AccountPage({
       {user ? (
         <section className="account-card">
           <div className="avatar">
-            {user.full_name
-              ?.charAt(0) || "د"}
+            {user.full_name?.charAt(
+              0
+            ) || "د"}
           </div>
 
           <h1>
-            {user.full_name}
+            {
+              user.full_name
+            }
           </h1>
 
           <p>
@@ -2008,14 +2652,20 @@ function AccountPage({
 
           <div className="account-status">
             <div>
-              <span>حساب کاربری</span>
+              <span>
+                حساب کاربری
+              </span>
+
               <strong>
                 فعال
               </strong>
             </div>
 
             <div>
-              <span>احراز شماره</span>
+              <span>
+                شماره موبایل
+              </span>
+
               <strong>
                 {user.phone_verified
                   ? "تأیید شده"
@@ -2026,7 +2676,9 @@ function AccountPage({
 
           <button
             className="secondary-button full"
-            onClick={onLogout}
+            onClick={
+              onLogout
+            }
             type="button"
           >
             خروج از حساب
@@ -2043,20 +2695,24 @@ function AccountPage({
           </h1>
 
           <p>
-            برای ثبت آگهی و استفاده از امکانات
-            بیشتر، حساب خودت را بساز.
+            برای ثبت آگهی و استفاده
+            از امکانات بیشتر، حساب
+            خودت را بساز.
           </p>
 
           <div className="account-tabs">
             <button
               type="button"
               className={
-                mode === "register"
+                mode ===
+                "register"
                   ? "active"
                   : ""
               }
               onClick={() =>
-                setMode("register")
+                setMode(
+                  "register"
+                )
               }
             >
               ثبت‌نام
@@ -2065,22 +2721,28 @@ function AccountPage({
             <button
               type="button"
               className={
-                mode === "login"
+                mode ===
+                "login"
                   ? "active"
                   : ""
               }
               onClick={() =>
-                setMode("login")
+                setMode(
+                  "login"
+                )
               }
             >
               ورود
             </button>
           </div>
 
-          {mode === "register" ? (
+          {mode ===
+          "register" ? (
             <form
               className="account-form"
-              onSubmit={onRegister}
+              onSubmit={
+                onRegister
+              }
             >
               <label className="field">
                 <span>
@@ -2088,10 +2750,16 @@ function AccountPage({
                 </span>
 
                 <input
-                  value={fullName}
-                  onChange={(event) =>
+                  value={
+                    fullName
+                  }
+                  onChange={(
+                    event
+                  ) =>
                     setFullName(
-                      event.target.value
+                      event
+                        .target
+                        .value
                     )
                   }
                   placeholder="مثلاً محمد حاتمی"
@@ -2104,10 +2772,16 @@ function AccountPage({
                 </span>
 
                 <input
-                  value={mobile}
-                  onChange={(event) =>
+                  value={
+                    mobile
+                  }
+                  onChange={(
+                    event
+                  ) =>
                     setMobile(
-                      event.target.value
+                      event
+                        .target
+                        .value
                     )
                   }
                   inputMode="tel"
@@ -2122,10 +2796,16 @@ function AccountPage({
 
                 <input
                   type="password"
-                  value={password}
-                  onChange={(event) =>
+                  value={
+                    password
+                  }
+                  onChange={(
+                    event
+                  ) =>
                     setPassword(
-                      event.target.value
+                      event
+                        .target
+                        .value
                     )
                   }
                   placeholder="حداقل ۶ کاراکتر"
@@ -2142,9 +2822,13 @@ function AccountPage({
                   value={
                     repeatPassword
                   }
-                  onChange={(event) =>
+                  onChange={(
+                    event
+                  ) =>
                     setRepeatPassword(
-                      event.target.value
+                      event
+                        .target
+                        .value
                     )
                   }
                   placeholder="رمز عبور را تکرار کنید"
@@ -2153,14 +2837,18 @@ function AccountPage({
 
               {message && (
                 <div className="form-message">
-                  {message}
+                  {
+                    message
+                  }
                 </div>
               )}
 
               <button
                 className="primary-button full"
                 type="submit"
-                disabled={loading}
+                disabled={
+                  loading
+                }
               >
                 {loading
                   ? "در حال ثبت..."
@@ -2175,10 +2863,16 @@ function AccountPage({
                 </span>
 
                 <input
-                  value={mobile}
-                  onChange={(event) =>
+                  value={
+                    mobile
+                  }
+                  onChange={(
+                    event
+                  ) =>
                     setMobile(
-                      event.target.value
+                      event
+                        .target
+                        .value
                     )
                   }
                   inputMode="tel"
@@ -2193,10 +2887,16 @@ function AccountPage({
 
                 <input
                   type="password"
-                  value={password}
-                  onChange={(event) =>
+                  value={
+                    password
+                  }
+                  onChange={(
+                    event
+                  ) =>
                     setPassword(
-                      event.target.value
+                      event
+                        .target
+                        .value
                     )
                   }
                   placeholder="رمز عبور"
@@ -2205,14 +2905,18 @@ function AccountPage({
 
               {message && (
                 <div className="form-message">
-                  {message}
+                  {
+                    message
+                  }
                 </div>
               )}
 
               <button
                 className="primary-button full"
                 type="button"
-                onClick={onLogin}
+                onClick={
+                  onLogin
+                }
               >
                 ورود
               </button>
@@ -2280,9 +2984,14 @@ function BottomNav({
             ? "active"
             : ""
         }
-        onClick={goHome}
+        onClick={
+          goHome
+        }
       >
-        <span>⌂</span>
+        <span>
+          ⌂
+        </span>
+
         <small>
           خانه
         </small>
@@ -2290,9 +2999,14 @@ function BottomNav({
 
       <button
         type="button"
-        onClick={goHome}
+        onClick={
+          goHome
+        }
       >
-        <span>▦</span>
+        <span>
+          ▦
+        </span>
+
         <small>
           دسته‌ها
         </small>
@@ -2301,9 +3015,14 @@ function BottomNav({
       <button
         type="button"
         className="add-button"
-        onClick={openCreateListing}
+        onClick={
+          openCreateListing
+        }
       >
-        <span>＋</span>
+        <span>
+          ＋
+        </span>
+
         <small>
           ثبت آگهی
         </small>
@@ -2311,9 +3030,14 @@ function BottomNav({
 
       <button
         type="button"
-        onClick={goHome}
+        onClick={
+          goHome
+        }
       >
-        <span>⚡</span>
+        <span>
+          ⚡
+        </span>
+
         <small>
           خدمات
         </small>
@@ -2322,13 +3046,19 @@ function BottomNav({
       <button
         type="button"
         className={
-          page === "account"
+          page ===
+          "account"
             ? "active"
             : ""
         }
-        onClick={openAccount}
+        onClick={
+          openAccount
+        }
       >
-        <span>♙</span>
+        <span>
+          ♙
+        </span>
+
         <small>
           حساب من
         </small>
@@ -2336,6 +3066,10 @@ function BottomNav({
     </nav>
   );
 }
+
+/* =========================================================
+   START
+========================================================= */
 
 createRoot(
   document.getElementById(
