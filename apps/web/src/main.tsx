@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
@@ -6,545 +6,282 @@ const API_BASE_URL = "";
 
 type Category = {
   id: string;
+  parent_id?: string | null;
   title: string;
-  icon: string;
-  description: string | null;
-  parent_id: string | null;
-  sort_order: number;
+  slug?: string;
+  icon?: string | null;
+  description?: string | null;
+  sort_order?: number;
+  is_active?: number;
 };
 
 type User = {
   id: string;
   full_name: string;
   mobile: string;
-  role: string;
-  phone_verified: boolean;
-  identity_verified: boolean;
-  business_verified: boolean;
+  role?: string;
+  phone_verified?: number;
+  identity_verified?: number;
+  business_verified?: number;
+  avatar_url?: string | null;
+  bio?: string | null;
+};
+
+type ListingPhoto = {
+  id: string;
+  listing_id: string;
+  file_key: string;
+  file_url: string;
+  sort_order: number;
+  created_at?: string;
 };
 
 type Listing = {
   id: string;
-  title: string;
-  description: string | null;
-  price: number | null;
-  city: string | null;
-  condition: string | null;
+  user_id: string;
   category_id: string;
-  category_title: string | null;
-  category_icon: string | null;
+  title: string;
+  description?: string | null;
+  listing_type?: string;
+  price?: number | null;
+  price_type?: string | null;
+  old_price?: number | null;
+  discount_percent?: number | null;
+  city?: string | null;
+  location_id?: string | null;
+  status?: string;
+  condition?: string | null;
+  view_count?: number;
+  favorite_count?: number;
+  message_count?: number;
+  call_count?: number;
+  expires_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  category_title?: string | null;
+  category_icon?: string | null;
   image_url?: string | null;
+  photos?: ListingPhoto[];
 };
 
+type ImageKitAuth = {
+  success: boolean;
+  token: string;
+  expire: number;
+  signature: string;
+  publicKey: string;
+};
+
+type Page =
+  | "home"
+  | "category"
+  | "listing"
+  | "account"
+  | "create";
+
+const MAX_PHOTOS = 8;
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
+
+function formatPrice(price?: number | null) {
+  if (price === null || price === undefined || !Number.isFinite(Number(price))) {
+    return "توافقی";
+  }
+
+  return `${Number(price).toLocaleString("fa-IR")} تومان`;
+}
+
+function formatCondition(condition?: string | null) {
+  if (!condition) return "";
+
+  const values: Record<string, string> = {
+    new: "نو",
+    used: "کارکرده",
+    like_new: "در حد نو",
+  };
+
+  return values[condition] || condition;
+}
+
+function truncateText(text?: string | null, length = 90) {
+  if (!text) return "";
+  return text.length > length
+    ? `${text.slice(0, length)}…`
+    : text;
+}
+
+function getUser(): User | null {
+  try {
+    const raw = localStorage.getItem("dardone_user");
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function setStoredUser(user: User) {
+  localStorage.setItem("dardone_user", JSON.stringify(user));
+}
+
+function removeStoredUser() {
+  localStorage.removeItem("dardone_user");
+}
+
+async function apiFetch<T>(
+  url: string,
+  options?: RequestInit
+): Promise<T> {
+  const response = await fetch(
+    `${API_BASE_URL}${url}`,
+    {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...(options?.headers || {}),
+      },
+    }
+  );
+
+  const text = await response.text();
+
+  let data: any = {};
+
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    data = {
+      success: false,
+      error: text || "پاسخ نامعتبر از سرور",
+    };
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error ||
+        data?.message ||
+        `خطای سرور (${response.status})`
+    );
+  }
+
+  return data as T;
+}
+
+async function getImageKitAuth() {
+  return apiFetch<ImageKitAuth>(
+    "/api/imagekit-auth",
+    {
+      method: "POST",
+      body: JSON.stringify({}),
+    }
+  );
+}
+
+async function uploadImageToImageKit(
+  file: File,
+  auth: ImageKitAuth
+) {
+  const formData = new FormData();
+
+  formData.append("file", file);
+  formData.append("fileName", file.name);
+  formData.append("publicKey", auth.publicKey);
+  formData.append("signature", auth.signature);
+  formData.append("expire", String(auth.expire));
+  formData.append("token", auth.token);
+
+  formData.append(
+    "folder",
+    "/dardone/listings"
+  );
+
+  const response = await fetch(
+    "https://upload.imagekit.io/api/v1/files/upload",
+    {
+      method: "POST",
+      body: formData,
+    }
+  );
+
+  const text = await response.text();
+
+  let data: any = {};
+
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    throw new Error(
+      "پاسخ نامعتبر از ImageKit دریافت شد."
+    );
+  }
+
+  if (!response.ok || !data?.url) {
+    throw new Error(
+      data?.message ||
+        data?.error?.message ||
+        "آپلود تصویر انجام نشد."
+    );
+  }
+
+  return {
+    fileId: data.fileId || "",
+    filePath: data.filePath || "",
+    url: data.url,
+  };
+}
+
 function App() {
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [categoriesLoading, setCategoriesLoading] =
-    useState(true);
+  const [page, setPage] =
+    useState<Page>("home");
+
+  const [categories, setCategories] =
+    useState<Category[]>([]);
 
   const [selectedCategory, setSelectedCategory] =
     useState<Category | null>(null);
 
-  const [showAccount, setShowAccount] =
+  const [selectedListing, setSelectedListing] =
+    useState<Listing | null>(null);
+
+  const [user, setUser] =
+    useState<User | null>(() => getUser());
+
+  const [loadingCategories, setLoadingCategories] =
+    useState(true);
+
+  const [categoryListings, setCategoryListings] =
+    useState<Listing[]>([]);
+
+  const [loadingListings, setLoadingListings] =
     useState(false);
 
-  const [showCreateListing, setShowCreateListing] =
+  const [listingDetailsLoading, setListingDetailsLoading] =
     useState(false);
 
-  const [user, setUser] = useState<User | null>(() => {
-    try {
-      const saved =
-        localStorage.getItem("dardone_user");
+  const [error, setError] =
+    useState("");
 
-      if (!saved) {
-        return null;
-      }
+  const [search, setSearch] =
+    useState("");
 
-      return JSON.parse(saved);
-    } catch {
-      return null;
-    }
-  });
+  const [accountMode, setAccountMode] =
+    useState<"register" | "login">("register");
 
-  useEffect(() => {
-    let cancelled = false;
+  const [fullName, setFullName] =
+    useState("");
 
-    async function loadCategories() {
-      try {
-        const response = await fetch(
-          `${API_BASE_URL}/api/categories`
-        );
+  const [mobile, setMobile] =
+    useState("");
 
-        if (!response.ok) {
-          throw new Error(
-            `Failed to load categories: ${response.status}`
-          );
-        }
+  const [password, setPassword] =
+    useState("");
 
-        const data = await response.json();
+  const [repeatPassword, setRepeatPassword] =
+    useState("");
 
-        if (
-          !cancelled &&
-          data.success &&
-          Array.isArray(data.categories)
-        ) {
-          setCategories(data.categories);
-        }
-      } catch (error) {
-        console.error(
-          "Categories API error:",
-          error
-        );
-      } finally {
-        if (!cancelled) {
-          setCategoriesLoading(false);
-        }
-      }
-    }
+  const [accountLoading, setAccountLoading] =
+    useState(false);
 
-    loadCategories();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  function goHome() {
-    setSelectedCategory(null);
-    setShowAccount(false);
-    setShowCreateListing(false);
-
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth"
-    });
-  }
-
-  function openCategory(category: Category) {
-    setSelectedCategory(category);
-    setShowAccount(false);
-    setShowCreateListing(false);
-
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth"
-    });
-  }
-
-  function closeCategory() {
-    setSelectedCategory(null);
-
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth"
-    });
-  }
-
-  function openAccount() {
-    setSelectedCategory(null);
-    setShowAccount(true);
-    setShowCreateListing(false);
-
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth"
-    });
-  }
-
-  function closeAccount() {
-    setShowAccount(false);
-
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth"
-    });
-  }
-
-  function openCreateListing() {
-    setSelectedCategory(null);
-    setShowAccount(false);
-    setShowCreateListing(true);
-
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth"
-    });
-  }
-
-  function closeCreateListing() {
-    setShowCreateListing(false);
-
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth"
-    });
-  }
-
-  function handleRegisteredUser(
-    newUser: User
-  ) {
-    setUser(newUser);
-
-    localStorage.setItem(
-      "dardone_user",
-      JSON.stringify(newUser)
-    );
-  }
-
-  function logout() {
-    localStorage.removeItem(
-      "dardone_user"
-    );
-
-    setUser(null);
-    setShowAccount(true);
-  }
-
-  return (
-    <div className="app">
-      <header className="topbar">
-        <button
-          className="brand"
-          onClick={goHome}
-        >
-          <div className="brand-mark">
-            د
-          </div>
-
-          <div>
-            <strong>دردونه</strong>
-            <span>
-              بازار هوشمند محلی
-            </span>
-          </div>
-        </button>
-
-        <div className="top-actions">
-          <button className="location-btn">
-            📍 اطراف من
-          </button>
-
-          <button
-            className="profile-btn"
-            onClick={openAccount}
-          >
-            {user
-              ? "حساب من"
-              : "حساب کاربری"}
-          </button>
-        </div>
-      </header>
-
-      <main>
-        {showCreateListing ? (
-          <CreateListingPage
-            user={user}
-            categories={categories}
-            onBack={closeCreateListing}
-            onNeedAccount={openAccount}
-          />
-        ) : showAccount ? (
-          <AccountPage
-            user={user}
-            onRegistered={
-              handleRegisteredUser
-            }
-            onLogout={logout}
-            onBack={closeAccount}
-          />
-        ) : selectedCategory ? (
-          <CategoryPage
-            category={selectedCategory}
-            onBack={closeCategory}
-          />
-        ) : (
-          <HomePage
-            categories={categories}
-            categoriesLoading={
-              categoriesLoading
-            }
-            onCategoryClick={
-              openCategory
-            }
-          />
-        )}
-      </main>
-
-      <button
-        className="floating-add"
-        onClick={openCreateListing}
-      >
-        ＋ ثبت
-      </button>
-
-      <nav className="bottom-nav">
-        <button
-          className={
-            !selectedCategory &&
-            !showAccount &&
-            !showCreateListing
-              ? "active"
-              : ""
-          }
-          onClick={goHome}
-        >
-          <span>⌂</span>
-          خانه
-        </button>
-
-        <button
-          className={
-            selectedCategory
-              ? "active"
-              : ""
-          }
-          onClick={() => {
-            setShowAccount(false);
-            setShowCreateListing(false);
-
-            if (selectedCategory) {
-              closeCategory();
-            }
-
-            setTimeout(() => {
-              document
-                .querySelector(
-                  ".categories"
-                )
-                ?.scrollIntoView({
-                  behavior: "smooth"
-                });
-            }, 50);
-          }}
-        >
-          <span>▦</span>
-          دسته‌ها
-        </button>
-
-        <button>
-          <span>⚡</span>
-          خدمات
-        </button>
-
-        <button>
-          <span>🎁</span>
-          کمپین‌ها
-        </button>
-
-        <button
-          className={
-            showAccount
-              ? "active"
-              : ""
-          }
-          onClick={openAccount}
-        >
-          <span>☻</span>
-          حساب من
-        </button>
-      </nav>
-    </div>
-  );
-}
-
-/* =========================================================
-   HOME
-========================================================= */
-
-function HomePage({
-  categories,
-  categoriesLoading,
-  onCategoryClick
-}: {
-  categories: Category[];
-  categoriesLoading: boolean;
-  onCategoryClick: (
-    category: Category
-  ) => void;
-}) {
-  return (
-    <>
-      <section className="hero">
-        <div className="hero-content">
-          <span className="badge">
-            دردونه | بازار هوشمند محلی
-          </span>
-
-          <h1>
-            هر چیزی که
-            <br />
-            <span>
-              دنبالش هستی،
-            </span>
-            <br />
-            همین اطرافه.
-          </h1>
-
-          <p>
-            خرید، فروش، خدمات، کسب‌وکارها،
-            کار، ملک و خودرو؛ همه در یک بازار
-            هوشمند و نزدیک به شما.
-          </p>
-
-          <div className="search-box">
-            <span>⌕</span>
-
-            <input
-              type="text"
-              placeholder="چی می‌خوای پیدا کنی؟"
-              aria-label="جستجو"
-            />
-
-            <button>
-              جستجو
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <section className="nearby">
-        <div className="section-heading">
-          <div>
-            <span>
-              موقعیت شما
-            </span>
-
-            <h2>
-              اطراف من
-            </h2>
-          </div>
-
-          <button>
-            مشاهده همه ←
-          </button>
-        </div>
-
-        <div className="nearby-card">
-          <div className="nearby-icon">
-            📍
-          </div>
-
-          <div>
-            <strong>
-              چیزهای نزدیک شما را پیدا کنید
-            </strong>
-
-            <p>
-              با فعال کردن موقعیت مکانی،
-              آگهی‌ها و خدمات نزدیک خودتان
-              را سریع‌تر پیدا کنید.
-            </p>
-          </div>
-
-          <button>
-            فعال کردن موقعیت
-          </button>
-        </div>
-      </section>
-
-      <section className="categories">
-        <div className="section-heading">
-          <div>
-            <span>
-              دسته‌بندی‌ها
-            </span>
-
-            <h2>
-              چی می‌خوای پیدا کنی؟
-            </h2>
-          </div>
-
-          <button>
-            همه دسته‌ها ←
-          </button>
-        </div>
-
-        <div className="category-grid">
-          {categoriesLoading ? (
-            <>
-              <CategorySkeleton />
-              <CategorySkeleton />
-              <CategorySkeleton />
-              <CategorySkeleton />
-            </>
-          ) : categories.length > 0 ? (
-            categories.map(
-              (category) => (
-                <Category
-                  key={category.id}
-                  icon={
-                    category.icon ||
-                    "📦"
-                  }
-                  title={
-                    category.title
-                  }
-                  onClick={() =>
-                    onCategoryClick(
-                      category
-                    )
-                  }
-                />
-              )
-            )
-          ) : (
-            <div className="category-error">
-              <strong>
-                دسته‌بندی‌ها بارگذاری نشدند
-              </strong>
-
-              <p>
-                لطفاً صفحه را دوباره باز کنید.
-              </p>
-            </div>
-          )}
-        </div>
-      </section>
-
-      <section className="features">
-        <Feature
-          icon="⚡"
-          title="سریع و ساده"
-          text="آگهی و درخواستت را در چند مرحله کوتاه ثبت کن."
-        />
-
-        <Feature
-          icon="📍"
-          title="واقعاً محلی"
-          text="خدمات و پیشنهادهای نزدیک خودت را پیدا کن."
-        />
-
-        <Feature
-          icon="🛡️"
-          title="اعتماد بیشتر"
-          text="احراز هویت، نشان‌های تأیید و سیستم امتیازدهی."
-        />
-
-        <Feature
-          icon="🤖"
-          title="هوشمند"
-          text="جستجو و ساخت آگهی با کمک هوش مصنوعی."
-        />
-      </section>
-    </>
-  );
-}
-
-/* =========================================================
-   CREATE LISTING
-========================================================= */
-
-function CreateListingPage({
-  user,
-  categories,
-  onBack,
-  onNeedAccount
-}: {
-  user: User | null;
-  categories: Category[];
-  onBack: () => void;
-  onNeedAccount: () => void;
-}) {
-  const [categoryId, setCategoryId] =
+  const [accountMessage, setAccountMessage] =
     useState("");
 
   const [title, setTitle] =
@@ -556,373 +293,1638 @@ function CreateListingPage({
   const [price, setPrice] =
     useState("");
 
+  const [priceType, setPriceType] =
+    useState("fixed");
+
   const [city, setCity] =
     useState("شهرکرد");
 
   const [condition, setCondition] =
-    useState("used");
+    useState("new");
 
-  const [priceType, setPriceType] =
-    useState("fixed");
-
-  const [loading, setLoading] =
+  const [createLoading, setCreateLoading] =
     useState(false);
 
-  const [error, setError] =
+  const [createMessage, setCreateMessage] =
     useState("");
 
-  const [success, setSuccess] =
-    useState("");
+  const [selectedFiles, setSelectedFiles] =
+    useState<File[]>([]);
 
-  async function submitListing() {
-    setError("");
-    setSuccess("");
+  const [previewUrls, setPreviewUrls] =
+    useState<string[]>([]);
 
-    if (!user) {
+  const galleryInputRef =
+    useRef<HTMLInputElement | null>(null);
+
+  const cameraInputRef =
+    useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    loadCategories();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      previewUrls.forEach((url) =>
+        URL.revokeObjectURL(url)
+      );
+    };
+  }, [previewUrls]);
+
+  async function loadCategories() {
+    try {
+      setLoadingCategories(true);
+      setError("");
+
+      const data = await apiFetch<{
+        success: boolean;
+        categories: Category[];
+      }>("/api/categories");
+
+      setCategories(data.categories || []);
+    } catch (err) {
       setError(
+        err instanceof Error
+          ? err.message
+          : "دریافت دسته‌بندی‌ها انجام نشد."
+      );
+    } finally {
+      setLoadingCategories(false);
+    }
+  }
+
+  function goHome() {
+    setPage("home");
+    setSelectedCategory(null);
+    setSelectedListing(null);
+    setError("");
+  }
+
+  async function openCategory(category: Category) {
+    setSelectedCategory(category);
+    setSelectedListing(null);
+    setPage("category");
+
+    await loadListings(category.id);
+  }
+
+  function closeCategory() {
+    goHome();
+  }
+
+  async function loadListings(
+    categoryId: string,
+    searchValue = ""
+  ) {
+    try {
+      setLoadingListings(true);
+      setError("");
+
+      const params = new URLSearchParams();
+
+      params.set("category_id", categoryId);
+
+      if (searchValue.trim()) {
+        params.set(
+          "search",
+          searchValue.trim()
+        );
+      }
+
+      const data = await apiFetch<{
+        success: boolean;
+        listings: Listing[];
+      }>(
+        `/api/listings?${params.toString()}`
+      );
+
+      setCategoryListings(
+        data.listings || []
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "دریافت آگهی‌ها انجام نشد."
+      );
+
+      setCategoryListings([]);
+    } finally {
+      setLoadingListings(false);
+    }
+  }
+
+  async function openListing(listing: Listing) {
+    setSelectedListing(listing);
+    setPage("listing");
+    setListingDetailsLoading(true);
+
+    try {
+      const data = await apiFetch<{
+        success: boolean;
+        listing: Listing;
+        photos: ListingPhoto[];
+      }>(
+        `/api/listings/${listing.id}`
+      );
+
+      setSelectedListing({
+        ...data.listing,
+        photos: data.photos || [],
+        image_url:
+          data.photos?.[0]?.file_url ||
+          data.listing.image_url ||
+          null,
+      });
+    } catch {
+      setSelectedListing(listing);
+    } finally {
+      setListingDetailsLoading(false);
+    }
+  }
+
+  function closeListing() {
+    if (selectedCategory) {
+      setPage("category");
+    } else {
+      goHome();
+    }
+  }
+
+  function openAccount() {
+    setPage("account");
+    setAccountMessage("");
+    setError("");
+  }
+
+  function closeAccount() {
+    goHome();
+  }
+
+  function openCreateListing() {
+    if (!user) {
+      setPage("account");
+      setAccountMessage(
         "برای ثبت آگهی ابتدا وارد حساب کاربری شوید."
       );
       return;
     }
 
-    if (!categoryId) {
-      setError(
-        "لطفاً یک دسته‌بندی انتخاب کنید."
+    setPage("create");
+    setCreateMessage("");
+    setError("");
+  }
+
+  function closeCreateListing() {
+    goHome();
+  }
+
+  function handleRegisteredUser(
+    registeredUser: User
+  ) {
+    setUser(registeredUser);
+    setStoredUser(registeredUser);
+    setPage("home");
+  }
+
+  function logout() {
+    removeStoredUser();
+    setUser(null);
+    setPage("home");
+  }
+
+  function addSelectedFiles(
+    files: FileList | null
+  ) {
+    if (!files) return;
+
+    const incoming = Array.from(files);
+
+    if (
+      selectedFiles.length +
+        incoming.length >
+      MAX_PHOTOS
+    ) {
+      setCreateMessage(
+        `حداکثر ${MAX_PHOTOS} عکس می‌توانید انتخاب کنید.`
+      );
+      return;
+    }
+
+    const validFiles: File[] = [];
+
+    for (const file of incoming) {
+      if (!file.type.startsWith("image/")) {
+        setCreateMessage(
+          "فقط فایل‌های تصویری قابل انتخاب هستند."
+        );
+        continue;
+      }
+
+      if (file.size > MAX_FILE_SIZE) {
+        setCreateMessage(
+          `حجم عکس «${file.name}» بیشتر از ۱۰ مگابایت است.`
+        );
+        continue;
+      }
+
+      validFiles.push(file);
+    }
+
+    if (!validFiles.length) {
+      return;
+    }
+
+    const nextFiles = [
+      ...selectedFiles,
+      ...validFiles,
+    ];
+
+    const nextUrls = nextFiles.map((file) =>
+      URL.createObjectURL(file)
+    );
+
+    previewUrls.forEach((url) =>
+      URL.revokeObjectURL(url)
+    );
+
+    setSelectedFiles(nextFiles);
+    setPreviewUrls(nextUrls);
+    setCreateMessage("");
+  }
+
+  function removeSelectedFile(index: number) {
+    const nextFiles =
+      selectedFiles.filter(
+        (_, fileIndex) =>
+          fileIndex !== index
+      );
+
+    const nextUrls = nextFiles.map((file) =>
+      URL.createObjectURL(file)
+    );
+
+    previewUrls.forEach((url) =>
+      URL.revokeObjectURL(url)
+    );
+
+    setSelectedFiles(nextFiles);
+    setPreviewUrls(nextUrls);
+  }
+
+  async function submitListing(
+    event: React.FormEvent
+  ) {
+    event.preventDefault();
+
+    if (!user) {
+      setCreateMessage(
+        "ابتدا وارد حساب کاربری شوید."
+      );
+      return;
+    }
+
+    if (!selectedCategory) {
+      setCreateMessage(
+        "ابتدا یک دسته‌بندی انتخاب کنید."
       );
       return;
     }
 
     if (!title.trim()) {
-      setError(
+      setCreateMessage(
         "عنوان آگهی را وارد کنید."
       );
       return;
     }
 
-    if (title.trim().length < 3) {
-      setError(
-        "عنوان آگهی باید حداقل ۳ کاراکتر باشد."
-      );
-      return;
-    }
-
     if (!description.trim()) {
-      setError(
+      setCreateMessage(
         "توضیحات آگهی را وارد کنید."
       );
       return;
     }
 
-    setLoading(true);
-
     try {
-      const response = await fetch(
-        `${API_BASE_URL}/api/listings`,
-        {
+      setCreateLoading(true);
+      setCreateMessage("");
+      setError("");
+
+      const listingResponse =
+        await apiFetch<{
+          success: boolean;
+          listing: Listing;
+        }>("/api/listings", {
           method: "POST",
-          headers: {
-            "Content-Type":
-              "application/json"
-          },
           body: JSON.stringify({
             user_id: user.id,
-            category_id: categoryId,
+            category_id:
+              selectedCategory.id,
             title: title.trim(),
             description:
               description.trim(),
             listing_type: "product",
             price:
-              price.trim() !== ""
-                ? Number(
-                    price.replace(
-                      /,/g,
-                      ""
-                    )
-                  )
-                : null,
+              price.trim() === ""
+                ? null
+                : Number(price),
             price_type: priceType,
-            city: city.trim() || null,
-            condition:
-              condition || null
-          })
-        }
-      );
+            city: city.trim(),
+            condition,
+          }),
+        });
 
-      const data =
-        await response.json();
+      const createdListing =
+        listingResponse.listing;
 
       if (
-        !response.ok ||
-        !data.success
+        selectedFiles.length > 0
       ) {
-        throw new Error(
-          data.error ||
-            "ثبت آگهی انجام نشد."
+        setCreateMessage(
+          "آگهی ثبت شد؛ در حال آماده‌سازی عکس‌ها..."
         );
+
+        const auth =
+          await getImageKitAuth();
+
+        for (
+          let index = 0;
+          index < selectedFiles.length;
+          index++
+        ) {
+          setCreateMessage(
+            `در حال آپلود عکس ${index + 1} از ${selectedFiles.length}...`
+          );
+
+          const uploaded =
+            await uploadImageToImageKit(
+              selectedFiles[index],
+              auth
+            );
+
+          await apiFetch(
+            `/api/listings/${createdListing.id}/photos`,
+            {
+              method: "POST",
+              body: JSON.stringify({
+                file_key:
+                  uploaded.filePath ||
+                  uploaded.fileId,
+                file_url:
+                  uploaded.url,
+                sort_order: index,
+              }),
+            }
+          );
+        }
       }
 
-      setSuccess(
-        "آگهی شما با موفقیت ثبت شد."
+      setCreateMessage(
+        selectedFiles.length
+          ? "آگهی و عکس‌ها با موفقیت ثبت شدند."
+          : "آگهی با موفقیت ثبت شد."
       );
 
       setTitle("");
       setDescription("");
       setPrice("");
-      setCategoryId("");
+      setPriceType("fixed");
+      setCondition("new");
+
+      previewUrls.forEach((url) =>
+        URL.revokeObjectURL(url)
+      );
+
+      setSelectedFiles([]);
+      setPreviewUrls([]);
+
+      const refreshed =
+        await apiFetch<{
+          success: boolean;
+          listing: Listing;
+          photos: ListingPhoto[];
+        }>(
+          `/api/listings/${createdListing.id}`
+        );
+
+      setSelectedListing({
+        ...refreshed.listing,
+        photos:
+          refreshed.photos || [],
+        image_url:
+          refreshed.photos?.[0]?.file_url ||
+          null,
+      });
+
+      setPage("listing");
+    } catch (err) {
+      setCreateMessage(
+        err instanceof Error
+          ? err.message
+          : "ثبت آگهی انجام نشد."
+      );
+    } finally {
+      setCreateLoading(false);
+    }
+  }
+
+  async function register(
+    event: React.FormEvent
+  ) {
+    event.preventDefault();
+
+    setAccountMessage("");
+    setError("");
+
+    if (!fullName.trim()) {
+      setAccountMessage(
+        "نام و نام خانوادگی را وارد کنید."
+      );
+      return;
+    }
+
+    if (!mobile.trim()) {
+      setAccountMessage(
+        "شماره موبایل را وارد کنید."
+      );
+      return;
+    }
+
+    if (password.length < 6) {
+      setAccountMessage(
+        "رمز عبور باید حداقل ۶ کاراکتر باشد."
+      );
+      return;
+    }
+
+    if (password !== repeatPassword) {
+      setAccountMessage(
+        "تکرار رمز عبور صحیح نیست."
+      );
+      return;
+    }
+
+    try {
+      setAccountLoading(true);
+
+      const data =
+        await apiFetch<{
+          success: boolean;
+          user: User;
+        }>("/api/register", {
+          method: "POST",
+          body: JSON.stringify({
+            full_name:
+              fullName.trim(),
+            mobile: mobile.trim(),
+            password,
+          }),
+        });
+
+      handleRegisteredUser(
+        data.user
+      );
+    } catch (err) {
+      setAccountMessage(
+        err instanceof Error
+          ? err.message
+          : "ثبت‌نام انجام نشد."
+      );
+    } finally {
+      setAccountLoading(false);
+    }
+  }
+
+  function login() {
+    setAccountMessage(
+      "ورود با شماره موبایل در مرحله بعدی فعال می‌شود."
+    );
+  }
+
+  async function submitSearch(
+    event: React.FormEvent
+  ) {
+    event.preventDefault();
+
+    const value = search.trim();
+
+    if (!value) {
+      return;
+    }
+
+    if (selectedCategory) {
+      setPage("category");
+      await loadListings(
+        selectedCategory.id,
+        value
+      );
+      return;
+    }
+
+    try {
+      setLoadingListings(true);
+
+      const data =
+        await apiFetch<{
+          success: boolean;
+          listings: Listing[];
+        }>(
+          `/api/listings?search=${encodeURIComponent(
+            value
+          )}`
+        );
+
+      setCategoryListings(
+        data.listings || []
+      );
+
+      setPage("category");
+      setSelectedCategory(null);
     } catch (err) {
       setError(
         err instanceof Error
           ? err.message
-          : "خطایی در ثبت آگهی رخ داد."
+          : "جستجو انجام نشد."
       );
     } finally {
-      setLoading(false);
+      setLoadingListings(false);
     }
   }
 
-  if (!user) {
-    return (
-      <section className="create-listing-page">
+  return (
+    <div className="app-shell" dir="rtl">
+      <header className="topbar">
         <button
-          className="back-button"
-          onClick={onBack}
+          className="brand"
+          onClick={goHome}
+          type="button"
         >
-          → بازگشت به دردونه
+          <span className="brand-mark">
+            د
+          </span>
+
+          <span>
+            <strong>دردونه</strong>
+            <small>بازار محلی شما</small>
+          </span>
         </button>
 
-        <div className="create-listing-card account-required-card">
-          <div className="create-listing-icon">
-            🔐
-          </div>
+        <div className="topbar-actions">
+          <button
+            className="location-button"
+            type="button"
+          >
+            📍 شهرکرد
+          </button>
 
-          <span className="account-label">
-            ثبت آگهی
+          <button
+            className="account-button"
+            onClick={openAccount}
+            type="button"
+          >
+            {user
+              ? `👤 ${user.full_name}`
+              : "👤 حساب من"}
+          </button>
+        </div>
+      </header>
+
+      <main>
+        {page === "home" && (
+          <HomePage
+            search={search}
+            setSearch={setSearch}
+            onSearch={submitSearch}
+            categories={categories}
+            loadingCategories={
+              loadingCategories
+            }
+            openCategory={openCategory}
+            openCreateListing={
+              openCreateListing
+            }
+          />
+        )}
+
+        {page === "category" && (
+          <CategoryPage
+            category={selectedCategory}
+            listings={categoryListings}
+            loading={loadingListings}
+            search={search}
+            setSearch={setSearch}
+            onSearch={submitSearch}
+            onBack={goHome}
+            openListing={openListing}
+            openCreateListing={
+              openCreateListing
+            }
+          />
+        )}
+
+        {page === "listing" &&
+          selectedListing && (
+            <ListingDetailPage
+              listing={selectedListing}
+              loading={
+                listingDetailsLoading
+              }
+              onBack={closeListing}
+            />
+          )}
+
+        {page === "account" && (
+          <AccountPage
+            user={user}
+            mode={accountMode}
+            setMode={setAccountMode}
+            fullName={fullName}
+            setFullName={setFullName}
+            mobile={mobile}
+            setMobile={setMobile}
+            password={password}
+            setPassword={setPassword}
+            repeatPassword={
+              repeatPassword
+            }
+            setRepeatPassword={
+              setRepeatPassword
+            }
+            loading={accountLoading}
+            message={accountMessage}
+            onRegister={register}
+            onLogin={login}
+            onLogout={logout}
+            onBack={closeAccount}
+          />
+        )}
+
+        {page === "create" && (
+          <CreateListingPage
+            selectedCategory={
+              selectedCategory
+            }
+            categories={categories}
+            title={title}
+            setTitle={setTitle}
+            description={description}
+            setDescription={
+              setDescription
+            }
+            price={price}
+            setPrice={setPrice}
+            priceType={priceType}
+            setPriceType={setPriceType}
+            city={city}
+            setCity={setCity}
+            condition={condition}
+            setCondition={setCondition}
+            selectedFiles={
+              selectedFiles
+            }
+            previewUrls={previewUrls}
+            galleryInputRef={
+              galleryInputRef
+            }
+            cameraInputRef={
+              cameraInputRef
+            }
+            onFilesSelected={
+              addSelectedFiles
+            }
+            onRemoveFile={
+              removeSelectedFile
+            }
+            loading={createLoading}
+            message={createMessage}
+            onSubmit={submitListing}
+            onBack={closeCreateListing}
+            onCategoryChange={(
+              category
+            ) => {
+              setSelectedCategory(
+                category
+              );
+            }}
+          />
+        )}
+      </main>
+
+      <BottomNav
+        page={page}
+        goHome={goHome}
+        openAccount={openAccount}
+        openCreateListing={
+          openCreateListing
+        }
+      />
+
+      {error && (
+        <div className="toast-error">
+          {error}
+          <button
+            type="button"
+            onClick={() => setError("")}
+          >
+            ×
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* =========================================================
+   HOME
+========================================================= */
+
+function HomePage({
+  search,
+  setSearch,
+  onSearch,
+  categories,
+  loadingCategories,
+  openCategory,
+  openCreateListing,
+}: {
+  search: string;
+  setSearch: (value: string) => void;
+  onSearch: (
+    event: React.FormEvent
+  ) => void;
+  categories: Category[];
+  loadingCategories: boolean;
+  openCategory: (
+    category: Category
+  ) => void;
+  openCreateListing: () => void;
+}) {
+  return (
+    <div className="page">
+      <section className="hero-card">
+        <div className="hero-content">
+          <span className="hero-badge">
+            ✨ بازار محلی هوشمند
           </span>
 
           <h1>
-            ابتدا وارد حساب کاربری شوید
+            هر چیزی که می‌خواهی،
+            <br />
+            همین نزدیکی پیدا کن.
           </h1>
 
           <p>
-            برای ثبت آگهی و مدیریت آن،
-            لازم است یک حساب کاربری داشته باشید.
+            خرید، فروش، خدمات و کسب‌وکارهای
+            شهر خودت را در دردونه پیدا کن.
+          </p>
+
+          <form
+            className="search-box"
+            onSubmit={onSearch}
+          >
+            <span>🔎</span>
+
+            <input
+              value={search}
+              onChange={(event) =>
+                setSearch(
+                  event.target.value
+                )
+              }
+              placeholder="چی می‌خوای پیدا کنی؟"
+            />
+
+            <button type="submit">
+              جستجو
+            </button>
+          </form>
+
+          <button
+            className="primary-button hero-action"
+            type="button"
+            onClick={openCreateListing}
+          >
+            ➕ ثبت آگهی رایگان
+          </button>
+        </div>
+
+        <div className="hero-illustration">
+          🛍️
+        </div>
+      </section>
+
+      <section className="section">
+        <div className="section-heading">
+          <div>
+            <span>دسته‌بندی‌ها</span>
+            <h2>
+              چی می‌خوای؟
+            </h2>
+          </div>
+        </div>
+
+        {loadingCategories ? (
+          <div className="loading-box">
+            در حال دریافت دسته‌بندی‌ها...
+          </div>
+        ) : (
+          <div className="category-grid">
+            {categories.map(
+              (category) => (
+                <button
+                  className="category-card"
+                  key={category.id}
+                  onClick={() =>
+                    openCategory(
+                      category
+                    )
+                  }
+                  type="button"
+                >
+                  <span className="category-icon">
+                    {category.icon ||
+                      "📦"}
+                  </span>
+
+                  <strong>
+                    {category.title}
+                  </strong>
+
+                  <span className="category-arrow">
+                    ←
+                  </span>
+                </button>
+              )
+            )}
+          </div>
+        )}
+      </section>
+
+      <section className="feature-grid">
+        <Feature
+          icon="📍"
+          title="نزدیک شما"
+          text="مشاغل و آگهی‌های اطراف خودت را پیدا کن."
+        />
+
+        <Feature
+          icon="💬"
+          title="ارتباط آسان"
+          text="با فروشنده و صاحب کسب‌وکار ارتباط بگیر."
+        />
+
+        <Feature
+          icon="🛡️"
+          title="امن و مطمئن"
+          text="احراز هویت و امکانات امنیتی در مسیر توسعه."
+        />
+      </section>
+    </div>
+  );
+}
+
+/* =========================================================
+   CATEGORY
+========================================================= */
+
+function CategoryPage({
+  category,
+  listings,
+  loading,
+  search,
+  setSearch,
+  onSearch,
+  onBack,
+  openListing,
+  openCreateListing,
+}: {
+  category: Category | null;
+  listings: Listing[];
+  loading: boolean;
+  search: string;
+  setSearch: (value: string) => void;
+  onSearch: (
+    event: React.FormEvent
+  ) => void;
+  onBack: () => void;
+  openListing: (
+    listing: Listing
+  ) => void;
+  openCreateListing: () => void;
+}) {
+  return (
+    <div className="page">
+      <div className="page-top">
+        <button
+          className="back-button"
+          onClick={onBack}
+          type="button"
+        >
+          → بازگشت
+        </button>
+
+        <button
+          className="primary-button small"
+          onClick={openCreateListing}
+          type="button"
+        >
+          + ثبت آگهی
+        </button>
+      </div>
+
+      <section className="category-header">
+        <span className="big-icon">
+          {category?.icon || "📦"}
+        </span>
+
+        <div>
+          <span>دسته‌بندی</span>
+
+          <h1>
+            {category?.title ||
+              "نتایج جستجو"}
+          </h1>
+        </div>
+      </section>
+
+      <form
+        className="search-box compact"
+        onSubmit={onSearch}
+      >
+        <span>🔎</span>
+
+        <input
+          value={search}
+          onChange={(event) =>
+            setSearch(
+              event.target.value
+            )
+          }
+          placeholder="جستجو در آگهی‌ها..."
+        />
+
+        <button type="submit">
+          جستجو
+        </button>
+      </form>
+
+      {loading ? (
+        <div className="loading-box">
+          در حال دریافت آگهی‌ها...
+        </div>
+      ) : listings.length === 0 ? (
+        <div className="empty-box">
+          <span>📭</span>
+          <h3>
+            هنوز آگهی‌ای ثبت نشده
+          </h3>
+          <p>
+            اولین آگهی این بخش را شما ثبت
+            کنید.
           </p>
 
           <button
-            className="primary-account-button"
-            onClick={onNeedAccount}
+            className="primary-button"
+            onClick={openCreateListing}
+            type="button"
           >
-            ورود / ساخت حساب
+            ثبت اولین آگهی
           </button>
         </div>
-      </section>
-    );
-  }
+      ) : (
+        <div className="listing-grid">
+          {listings.map(
+            (listing) => (
+              <ListingCard
+                key={listing.id}
+                listing={listing}
+                onClick={() =>
+                  openListing(
+                    listing
+                  )
+                }
+              />
+            )
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* =========================================================
+   LISTING CARD
+========================================================= */
+
+function ListingCard({
+  listing,
+  onClick,
+}: {
+  listing: Listing;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      className="listing-card"
+      onClick={onClick}
+      type="button"
+    >
+      <div className="listing-image">
+        {listing.image_url ? (
+          <img
+            src={listing.image_url}
+            alt={listing.title}
+            loading="lazy"
+          />
+        ) : (
+          <span>📦</span>
+        )}
+      </div>
+
+      <div className="listing-body">
+        <div className="listing-category">
+          {listing.category_icon ||
+            "📦"}{" "}
+          {listing.category_title ||
+            "آگهی"}
+        </div>
+
+        <h3>
+          {listing.title}
+        </h3>
+
+        <p>
+          {truncateText(
+            listing.description
+          )}
+        </p>
+
+        <div className="listing-bottom">
+          <strong>
+            {formatPrice(
+              listing.price
+            )}
+          </strong>
+
+          {listing.city && (
+            <span>
+              📍 {listing.city}
+            </span>
+          )}
+        </div>
+
+        {listing.condition && (
+          <small className="condition">
+            {formatCondition(
+              listing.condition
+            )}
+          </small>
+        )}
+      </div>
+    </button>
+  );
+}
+
+/* =========================================================
+   LISTING DETAIL
+========================================================= */
+
+function ListingDetailPage({
+  listing,
+  loading,
+  onBack,
+}: {
+  listing: Listing;
+  loading: boolean;
+  onBack: () => void;
+}) {
+  const photos =
+    listing.photos &&
+    listing.photos.length
+      ? listing.photos
+      : listing.image_url
+      ? [
+          {
+            id: "single",
+            listing_id: listing.id,
+            file_key: "",
+            file_url:
+              listing.image_url,
+            sort_order: 0,
+          },
+        ]
+      : [];
 
   return (
-    <section className="create-listing-page">
+    <div className="page">
       <button
         className="back-button"
         onClick={onBack}
+        type="button"
       >
-        → بازگشت به دردونه
+        → بازگشت
       </button>
 
-      <div className="create-listing-card">
-        <div className="create-listing-icon">
-          ＋
+      {loading && (
+        <div className="loading-inline">
+          در حال دریافت اطلاعات...
+        </div>
+      )}
+
+      <section className="listing-detail">
+        <div className="detail-gallery">
+          {photos.length > 0 ? (
+            <>
+              <div className="main-photo">
+                <img
+                  src={photos[0].file_url}
+                  alt={listing.title}
+                />
+              </div>
+
+              {photos.length > 1 && (
+                <div className="thumbnail-grid">
+                  {photos.map(
+                    (photo) => (
+                      <img
+                        key={photo.id}
+                        src={photo.id}
+                        alt=""
+                      />
+                    )
+                  )}
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="detail-placeholder">
+              📦
+            </div>
+          )}
         </div>
 
-        <span className="account-label">
-          آگهی جدید
-        </span>
+        <div className="detail-info">
+          <div className="listing-category">
+            {listing.category_icon ||
+              "📦"}{" "}
+            {listing.category_title ||
+              "آگهی"}
+          </div>
 
-        <h1>
-          ثبت آگهی
-        </h1>
+          <h1>
+            {listing.title}
+          </h1>
 
-        <p className="create-listing-description">
-          اطلاعات آگهی را وارد کنید تا در
-          دسته‌بندی مربوطه نمایش داده شود.
-        </p>
+          <div className="detail-price">
+            {formatPrice(
+              listing.price
+            )}
+          </div>
 
-        <label className="form-label">
-          دسته‌بندی
-        </label>
-
-        <select
-          className="form-input form-select"
-          value={categoryId}
-          onChange={(event) =>
-            setCategoryId(
-              event.target.value
-            )
-          }
-        >
-          <option value="">
-            انتخاب دسته‌بندی
-          </option>
-
-          {categories.map(
-            (category) => (
-              <option
-                key={category.id}
-                value={category.id}
-              >
-                {category.icon || "📦"}{" "}
-                {category.title}
-              </option>
-            )
+          {listing.city && (
+            <div className="detail-meta">
+              📍 {listing.city}
+            </div>
           )}
-        </select>
 
-        <label className="form-label">
-          عنوان آگهی
-        </label>
+          {listing.condition && (
+            <div className="detail-meta">
+              🏷️{" "}
+              {formatCondition(
+                listing.condition
+              )}
+            </div>
+          )}
 
-        <input
-          className="form-input"
-          type="text"
-          value={title}
-          onChange={(event) =>
-            setTitle(
-              event.target.value
-            )
-          }
-          placeholder="مثلاً فروش گوشی سامسونگ"
-        />
+          <div className="detail-description">
+            <h3>
+              توضیحات
+            </h3>
 
-        <label className="form-label">
-          توضیحات
-        </label>
-
-        <textarea
-          className="form-textarea"
-          value={description}
-          onChange={(event) =>
-            setDescription(
-              event.target.value
-            )
-          }
-          placeholder="توضیحات کامل آگهی را بنویسید..."
-          rows={5}
-        />
-
-        <label className="form-label">
-          قیمت
-        </label>
-
-        <input
-          className="form-input"
-          type="text"
-          inputMode="numeric"
-          value={price}
-          onChange={(event) =>
-            setPrice(
-              event.target.value
-            )
-          }
-          placeholder="مثلاً ۱۵۰۰۰۰۰۰"
-          dir="ltr"
-        />
-
-        <label className="form-label">
-          نوع قیمت
-        </label>
-
-        <select
-          className="form-input form-select"
-          value={priceType}
-          onChange={(event) =>
-            setPriceType(
-              event.target.value
-            )
-          }
-        >
-          <option value="fixed">
-            قیمت ثابت
-          </option>
-
-          <option value="negotiable">
-            توافقی
-          </option>
-        </select>
-
-        <label className="form-label">
-          شهر
-        </label>
-
-        <input
-          className="form-input"
-          type="text"
-          value={city}
-          onChange={(event) =>
-            setCity(
-              event.target.value
-            )
-          }
-          placeholder="مثلاً شهرکرد"
-        />
-
-        <label className="form-label">
-          وضعیت کالا
-        </label>
-
-        <select
-          className="form-input form-select"
-          value={condition}
-          onChange={(event) =>
-            setCondition(
-              event.target.value
-            )
-          }
-        >
-          <option value="new">
-            نو
-          </option>
-
-          <option value="used">
-            کارکرده
-          </option>
-
-          <option value="like_new">
-            در حد نو
-          </option>
-
-          <option value="unknown">
-            مشخص نشده
-          </option>
-        </select>
-
-        {error && (
-          <div className="form-error">
-            {error}
+            <p>
+              {listing.description ||
+                "توضیحی برای این آگهی ثبت نشده است."}
+            </p>
           </div>
-        )}
 
-        {success && (
-          <div className="form-success">
-            {success}
+          <div className="detail-actions">
+            <button
+              className="primary-button"
+              type="button"
+            >
+              💬 پیام به فروشنده
+            </button>
+
+            <button
+              className="secondary-button"
+              type="button"
+            >
+              📞 تماس
+            </button>
           </div>
-        )}
+        </div>
+      </section>
+    </div>
+  );
+}
 
+/* =========================================================
+   CREATE LISTING
+========================================================= */
+
+function CreateListingPage({
+  selectedCategory,
+  categories,
+  title,
+  setTitle,
+  description,
+  setDescription,
+  price,
+  setPrice,
+  priceType,
+  setPriceType,
+  city,
+  setCity,
+  condition,
+  setCondition,
+  selectedFiles,
+  previewUrls,
+  galleryInputRef,
+  cameraInputRef,
+  onFilesSelected,
+  onRemoveFile,
+  loading,
+  message,
+  onSubmit,
+  onBack,
+  onCategoryChange,
+}: {
+  selectedCategory: Category | null;
+  categories: Category[];
+  title: string;
+  setTitle: (value: string) => void;
+  description: string;
+  setDescription: (
+    value: string
+  ) => void;
+  price: string;
+  setPrice: (value: string) => void;
+  priceType: string;
+  setPriceType: (
+    value: string
+  ) => void;
+  city: string;
+  setCity: (value: string) => void;
+  condition: string;
+  setCondition: (
+    value: string
+  ) => void;
+  selectedFiles: File[];
+  previewUrls: string[];
+  galleryInputRef: React.RefObject<HTMLInputElement | null>;
+  cameraInputRef: React.RefObject<HTMLInputElement | null>;
+  onFilesSelected: (
+    files: FileList | null
+  ) => void;
+  onRemoveFile: (
+    index: number
+  ) => void;
+  loading: boolean;
+  message: string;
+  onSubmit: (
+    event: React.FormEvent
+  ) => void;
+  onBack: () => void;
+  onCategoryChange: (
+    category: Category
+  ) => void;
+}) {
+  return (
+    <div className="page">
+      <div className="page-top">
         <button
-          className="primary-account-button"
-          onClick={submitListing}
-          disabled={loading}
+          className="back-button"
+          onClick={onBack}
+          type="button"
         >
-          {loading
-            ? "در حال ثبت آگهی..."
-            : "ثبت آگهی"}
+          → بازگشت
         </button>
-
-        <p className="form-note">
-          در مرحله بعدی، عکس، موقعیت دقیق،
-          مدیریت آگهی و امکانات بیشتر به این
-          فرم اضافه می‌شود.
-        </p>
       </div>
-    </section>
+
+      <section className="form-card">
+        <div className="form-heading">
+          <span>📢</span>
+          <div>
+            <span>رایگان</span>
+            <h1>
+              ثبت آگهی
+            </h1>
+          </div>
+        </div>
+
+        <form onSubmit={onSubmit}>
+          <label className="field">
+            <span>
+              دسته‌بندی
+            </span>
+
+            <select
+              value={
+                selectedCategory?.id || ""
+              }
+              onChange={(event) => {
+                const category =
+                  categories.find(
+                    (item) =>
+                      item.id ===
+                      event.target.value
+                  );
+
+                if (category) {
+                  onCategoryChange(
+                    category
+                  );
+                }
+              }}
+            >
+              <option value="">
+                انتخاب دسته‌بندی
+              </option>
+
+              {categories.map(
+                (category) => (
+                  <option
+                    key={category.id}
+                    value={category.id}
+                  >
+                    {category.icon || "📦"}{" "}
+                    {category.title}
+                  </option>
+                )
+              )}
+            </select>
+          </label>
+
+          <label className="field">
+            <span>
+              عنوان آگهی
+            </span>
+
+            <input
+              value={title}
+              onChange={(event) =>
+                setTitle(
+                  event.target.value
+                )
+              }
+              placeholder="مثلاً گوشی سامسونگ..."
+            />
+          </label>
+
+          <label className="field">
+            <span>
+              توضیحات
+            </span>
+
+            <textarea
+              value={description}
+              onChange={(event) =>
+                setDescription(
+                  event.target.value
+                )
+              }
+              placeholder="توضیحات کامل آگهی را بنویسید..."
+              rows={5}
+            />
+          </label>
+
+          <div className="two-fields">
+            <label className="field">
+              <span>
+                قیمت
+              </span>
+
+              <input
+                value={price}
+                onChange={(event) =>
+                  setPrice(
+                    event.target.value
+                  )
+                }
+                inputMode="numeric"
+                placeholder="مثلاً 25000000"
+              />
+            </label>
+
+            <label className="field">
+              <span>
+                نوع قیمت
+              </span>
+
+              <select
+                value={priceType}
+                onChange={(event) =>
+                  setPriceType(
+                    event.target.value
+                  )
+                }
+              >
+                <option value="fixed">
+                  قیمت ثابت
+                </option>
+                <option value="negotiable">
+                  قابل مذاکره
+                </option>
+              </select>
+            </label>
+          </div>
+
+          <div className="two-fields">
+            <label className="field">
+              <span>
+                شهر
+              </span>
+
+              <input
+                value={city}
+                onChange={(event) =>
+                  setCity(
+                    event.target.value
+                  )
+                }
+                placeholder="شهر"
+              />
+            </label>
+
+            <label className="field">
+              <span>
+                وضعیت
+              </span>
+
+              <select
+                value={condition}
+                onChange={(event) =>
+                  setCondition(
+                    event.target.value
+                  )
+                }
+              >
+                <option value="new">
+                  نو
+                </option>
+                <option value="like_new">
+                  در حد نو
+                </option>
+                <option value="used">
+                  کارکرده
+                </option>
+              </select>
+            </label>
+          </div>
+
+          <div className="photo-upload-section">
+            <div className="photo-heading">
+              <div>
+                <strong>
+                  📸 عکس‌های آگهی
+                </strong>
+                <small>
+                  تا {MAX_PHOTOS} عکس، حداکثر
+                  ۱۰ مگابایت برای هر عکس
+                </small>
+              </div>
+
+              <span>
+                {selectedFiles.length}/
+                {MAX_PHOTOS}
+              </span>
+            </div>
+
+            <div className="photo-buttons">
+              <button
+                type="button"
+                className="photo-button"
+                onClick={() =>
+                  cameraInputRef.current?.click()
+                }
+                disabled={
+                  loading ||
+                  selectedFiles.length >=
+                    MAX_PHOTOS
+                }
+              >
+                📷
+                <span>
+                  دوربین
+                </span>
+              </button>
+
+              <button
+                type="button"
+                className="photo-button"
+                onClick={() =>
+                  galleryInputRef.current?.click()
+                }
+                disabled={
+                  loading ||
+                  selectedFiles.length >=
+                    MAX_PHOTOS
+                }
+              >
+                🖼️
+                <span>
+                  گالری
+                </span>
+              </button>
+            </div>
+
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              hidden
+              onChange={(event) => {
+                onFilesSelected(
+                  event.target.files
+                );
+                event.currentTarget.value =
+                  "";
+              }}
+            />
+
+            <input
+              ref={galleryInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              hidden
+              onChange={(event) => {
+                onFilesSelected(
+                  event.target.files
+                );
+                event.currentTarget.value =
+                  "";
+              }}
+            />
+
+            {previewUrls.length > 0 && (
+              <div className="preview-grid">
+                {previewUrls.map(
+                  (url, index) => (
+                    <div
+                      className="preview-item"
+                      key={`${url}-${index}`}
+                    >
+                      <img
+                        src={url}
+                        alt={`پیش‌نمایش ${index + 1}`}
+                      />
+
+                      {index === 0 && (
+                        <span className="main-photo-label">
+                          عکس اصلی
+                        </span>
+                      )}
+
+                      <button
+                        type="button"
+                        className="remove-photo"
+                        onClick={() =>
+                          onRemoveFile(
+                            index
+                          )
+                        }
+                        aria-label="حذف عکس"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  )
+                )}
+              </div>
+            )}
+          </div>
+
+          {message && (
+            <div className="form-message">
+              {message}
+            </div>
+          )}
+
+          <button
+            className="primary-button submit-listing"
+            type="submit"
+            disabled={loading}
+          >
+            {loading
+              ? "در حال ثبت..."
+              : "🚀 ثبت آگهی"}
+          </button>
+        </form>
+      </section>
+    </div>
   );
 }
 
@@ -932,529 +1934,292 @@ function CreateListingPage({
 
 function AccountPage({
   user,
-  onRegistered,
+  mode,
+  setMode,
+  fullName,
+  setFullName,
+  mobile,
+  setMobile,
+  password,
+  setPassword,
+  repeatPassword,
+  setRepeatPassword,
+  loading,
+  message,
+  onRegister,
+  onLogin,
   onLogout,
-  onBack
+  onBack,
 }: {
   user: User | null;
-  onRegistered: (
-    user: User
+  mode: "register" | "login";
+  setMode: (
+    mode: "register" | "login"
   ) => void;
+  fullName: string;
+  setFullName: (
+    value: string
+  ) => void;
+  mobile: string;
+  setMobile: (
+    value: string
+  ) => void;
+  password: string;
+  setPassword: (
+    value: string
+  ) => void;
+  repeatPassword: string;
+  setRepeatPassword: (
+    value: string
+  ) => void;
+  loading: boolean;
+  message: string;
+  onRegister: (
+    event: React.FormEvent
+  ) => void;
+  onLogin: () => void;
   onLogout: () => void;
   onBack: () => void;
 }) {
-  const [mode, setMode] =
-    useState<"login" | "register">(
-      "register"
-    );
+  return (
+    <div className="page">
+      <button
+        className="back-button"
+        onClick={onBack}
+        type="button"
+      >
+        → بازگشت
+      </button>
 
-  const [fullName, setFullName] =
-    useState("");
-
-  const [mobile, setMobile] =
-    useState("");
-
-  const [password, setPassword] =
-    useState("");
-
-  const [
-    repeatPassword,
-    setRepeatPassword
-  ] = useState("");
-
-  const [loading, setLoading] =
-    useState(false);
-
-  const [message, setMessage] =
-    useState("");
-
-  const [error, setError] =
-    useState("");
-
-  async function register() {
-    setError("");
-    setMessage("");
-
-    if (!fullName.trim()) {
-      setError(
-        "نام و نام خانوادگی را وارد کنید."
-      );
-      return;
-    }
-
-    if (!mobile.trim()) {
-      setError(
-        "شماره موبایل را وارد کنید."
-      );
-      return;
-    }
-
-    if (password.length < 6) {
-      setError(
-        "رمز عبور باید حداقل ۶ کاراکتر باشد."
-      );
-      return;
-    }
-
-    if (
-      password !== repeatPassword
-    ) {
-      setError(
-        "رمز عبور و تکرار آن یکسان نیستند."
-      );
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const response = await fetch(
-        `${API_BASE_URL}/api/register`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type":
-              "application/json"
-          },
-          body: JSON.stringify({
-            full_name:
-              fullName.trim(),
-            mobile:
-              mobile.trim(),
-            password
-          })
-        }
-      );
-
-      const data =
-        await response.json();
-
-      if (
-        !response.ok ||
-        !data.success
-      ) {
-        throw new Error(
-          data.error ||
-            "ثبت‌نام انجام نشد."
-        );
-      }
-
-      onRegistered(data.user);
-
-      setPassword("");
-      setRepeatPassword("");
-
-      setMessage(
-        "حساب کاربری شما با موفقیت ساخته شد."
-      );
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "خطایی در ثبت‌نام رخ داد."
-      );
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  if (user) {
-    return (
-      <section className="account-page">
-        <button
-          className="back-button"
-          onClick={onBack}
-        >
-          → بازگشت به دردونه
-        </button>
-
-        <div className="account-card">
-          <div className="account-avatar">
+      {user ? (
+        <section className="account-card">
+          <div className="avatar">
             {user.full_name
-              ? user.full_name.charAt(0)
-              : "د"}
+              ?.charAt(0) || "د"}
           </div>
-
-          <span className="account-label">
-            حساب کاربری
-          </span>
 
           <h1>
             {user.full_name}
           </h1>
 
-          <p className="account-mobile">
-            📱 {user.mobile}
+          <p>
+            {user.mobile}
           </p>
 
           <div className="account-status">
             <div>
-              <span>
-                تأیید شماره
-              </span>
+              <span>حساب کاربری</span>
+              <strong>
+                فعال
+              </strong>
+            </div>
 
+            <div>
+              <span>احراز شماره</span>
               <strong>
                 {user.phone_verified
-                  ? "✓ تأیید شده"
-                  : "در انتظار تأیید"}
+                  ? "تأیید شده"
+                  : "تأیید نشده"}
               </strong>
             </div>
-
-            <div>
-              <span>
-                احراز هویت
-              </span>
-
-              <strong>
-                {user.identity_verified
-                  ? "✓ تأیید شده"
-                  : "هنوز انجام نشده"}
-              </strong>
-            </div>
-
-            <div>
-              <span>
-                تأیید کسب‌وکار
-              </span>
-
-              <strong>
-                {user.business_verified
-                  ? "✓ تأیید شده"
-                  : "هنوز انجام نشده"}
-              </strong>
-            </div>
-          </div>
-
-          <div className="account-actions">
-            <button>
-              📋 آگهی‌های من
-            </button>
-
-            <button>
-              ❤️ علاقه‌مندی‌ها
-            </button>
-
-            <button>
-              💬 پیام‌ها
-            </button>
-
-            <button>
-              ⚙️ تنظیمات حساب
-            </button>
           </div>
 
           <button
-            className="logout-button"
+            className="secondary-button full"
             onClick={onLogout}
+            type="button"
           >
             خروج از حساب
           </button>
-        </div>
-      </section>
-    );
-  }
+        </section>
+      ) : (
+        <section className="account-card">
+          <div className="account-icon">
+            👤
+          </div>
 
-  return (
-    <section className="account-page">
-      <button
-        className="back-button"
-        onClick={onBack}
-      >
-        → بازگشت به دردونه
-      </button>
+          <h1>
+            حساب کاربری
+          </h1>
 
-      <div className="account-card">
-        <div className="account-logo">
-          د
-        </div>
+          <p>
+            برای ثبت آگهی و استفاده از امکانات
+            بیشتر، حساب خودت را بساز.
+          </p>
 
-        <span className="account-label">
-          خوش آمدید
-        </span>
-
-        <h1>
-          {mode === "register"
-            ? "ساخت حساب کاربری"
-            : "ورود به دردونه"}
-        </h1>
-
-        <p className="account-description">
-          برای استفاده از امکانات کامل
-          دردونه حساب کاربری خودت را داشته
-          باش.
-        </p>
-
-        <div className="account-tabs">
-          <button
-            className={
-              mode === "register"
-                ? "active"
-                : ""
-            }
-            onClick={() => {
-              setMode("register");
-              setError("");
-              setMessage("");
-            }}
-          >
-            ثبت‌نام
-          </button>
-
-          <button
-            className={
-              mode === "login"
-                ? "active"
-                : ""
-            }
-            onClick={() => {
-              setMode("login");
-              setError("");
-              setMessage("");
-            }}
-          >
-            ورود
-          </button>
-        </div>
-
-        {mode === "register" ? (
-          <>
-            <label className="form-label">
-              نام و نام خانوادگی
-            </label>
-
-            <input
-              className="form-input"
-              type="text"
-              value={fullName}
-              onChange={(event) =>
-                setFullName(
-                  event.target.value
-                )
-              }
-              placeholder="مثلاً محمد حاتمی"
-            />
-
-            <label className="form-label">
-              شماره موبایل
-            </label>
-
-            <input
-              className="form-input"
-              type="tel"
-              value={mobile}
-              onChange={(event) =>
-                setMobile(
-                  event.target.value
-                )
-              }
-              placeholder="09xxxxxxxxx"
-              dir="ltr"
-            />
-
-            <label className="form-label">
-              رمز عبور
-            </label>
-
-            <input
-              className="form-input"
-              type="password"
-              value={password}
-              onChange={(event) =>
-                setPassword(
-                  event.target.value
-                )
-              }
-              placeholder="حداقل ۶ کاراکتر"
-              dir="ltr"
-            />
-
-            <label className="form-label">
-              تکرار رمز عبور
-            </label>
-
-            <input
-              className="form-input"
-              type="password"
-              value={repeatPassword}
-              onChange={(event) =>
-                setRepeatPassword(
-                  event.target.value
-                )
-              }
-              placeholder="رمز عبور را دوباره وارد کنید"
-              dir="ltr"
-            />
-
-            {error && (
-              <div className="form-error">
-                {error}
-              </div>
-            )}
-
-            {message && (
-              <div className="form-success">
-                {message}
-              </div>
-            )}
-
+          <div className="account-tabs">
             <button
-              className="primary-account-button"
-              onClick={register}
-              disabled={loading}
-            >
-              {loading
-                ? "در حال ساخت حساب..."
-                : "ساخت حساب کاربری"}
-            </button>
-
-            <p className="form-note">
-              در مراحل بعدی تأیید شماره
-              موبایل، احراز هویت و امکانات
-              امنیتی تکمیل می‌شوند.
-            </p>
-          </>
-        ) : (
-          <div className="login-coming">
-            <div>🔐</div>
-
-            <h2>
-              ورود به‌زودی فعال می‌شود
-            </h2>
-
-            <p>
-              زیرساخت حساب کاربری آماده شده
-              و در مرحله بعد سیستم ورود امن
-              را به آن متصل می‌کنیم.
-            </p>
-
-            <button
-              className="primary-account-button"
+              type="button"
+              className={
+                mode === "register"
+                  ? "active"
+                  : ""
+              }
               onClick={() =>
                 setMode("register")
               }
             >
-              ساخت حساب جدید
+              ثبت‌نام
+            </button>
+
+            <button
+              type="button"
+              className={
+                mode === "login"
+                  ? "active"
+                  : ""
+              }
+              onClick={() =>
+                setMode("login")
+              }
+            >
+              ورود
             </button>
           </div>
-        )}
-      </div>
-    </section>
-  );
-}
 
-/* =========================================================
-   CATEGORY PAGE
-========================================================= */
+          {mode === "register" ? (
+            <form
+              className="account-form"
+              onSubmit={onRegister}
+            >
+              <label className="field">
+                <span>
+                  نام و نام خانوادگی
+                </span>
 
-function CategoryPage({
-  category,
-  onBack
-}: {
-  category: Category;
-  onBack: () => void;
-}) {
-  return (
-    <section className="category-page">
-      <button
-        className="back-button"
-        onClick={onBack}
-      >
-        → بازگشت به دردونه
-      </button>
+                <input
+                  value={fullName}
+                  onChange={(event) =>
+                    setFullName(
+                      event.target.value
+                    )
+                  }
+                  placeholder="مثلاً محمد حاتمی"
+                />
+              </label>
 
-      <div className="category-page-header">
-        <div className="category-page-icon">
-          {category.icon || "📦"}
-        </div>
+              <label className="field">
+                <span>
+                  شماره موبایل
+                </span>
 
-        <div>
-          <span>
-            دسته‌بندی
-          </span>
+                <input
+                  value={mobile}
+                  onChange={(event) =>
+                    setMobile(
+                      event.target.value
+                    )
+                  }
+                  inputMode="tel"
+                  placeholder="09xxxxxxxxx"
+                />
+              </label>
 
-          <h1>
-            {category.title}
-          </h1>
-        </div>
-      </div>
+              <label className="field">
+                <span>
+                  رمز عبور
+                </span>
 
-      {category.description && (
-        <p className="category-description">
-          {category.description}
-        </p>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(event) =>
+                    setPassword(
+                      event.target.value
+                    )
+                  }
+                  placeholder="حداقل ۶ کاراکتر"
+                />
+              </label>
+
+              <label className="field">
+                <span>
+                  تکرار رمز عبور
+                </span>
+
+                <input
+                  type="password"
+                  value={
+                    repeatPassword
+                  }
+                  onChange={(event) =>
+                    setRepeatPassword(
+                      event.target.value
+                    )
+                  }
+                  placeholder="رمز عبور را تکرار کنید"
+                />
+              </label>
+
+              {message && (
+                <div className="form-message">
+                  {message}
+                </div>
+              )}
+
+              <button
+                className="primary-button full"
+                type="submit"
+                disabled={loading}
+              >
+                {loading
+                  ? "در حال ثبت..."
+                  : "ساخت حساب"}
+              </button>
+            </form>
+          ) : (
+            <div className="account-form">
+              <label className="field">
+                <span>
+                  شماره موبایل
+                </span>
+
+                <input
+                  value={mobile}
+                  onChange={(event) =>
+                    setMobile(
+                      event.target.value
+                    )
+                  }
+                  inputMode="tel"
+                  placeholder="09xxxxxxxxx"
+                />
+              </label>
+
+              <label className="field">
+                <span>
+                  رمز عبور
+                </span>
+
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(event) =>
+                    setPassword(
+                      event.target.value
+                    )
+                  }
+                  placeholder="رمز عبور"
+                />
+              </label>
+
+              {message && (
+                <div className="form-message">
+                  {message}
+                </div>
+              )}
+
+              <button
+                className="primary-button full"
+                type="button"
+                onClick={onLogin}
+              >
+                ورود
+              </button>
+            </div>
+          )}
+        </section>
       )}
-
-      <div className="category-empty">
-        <div className="category-empty-icon">
-          {category.icon || "📦"}
-        </div>
-
-        <h2>
-          آگهی‌های{" "}
-          {category.title}
-        </h2>
-
-        <p>
-          آگهی‌های این دسته پس از ثبت
-          در اینجا نمایش داده خواهند شد.
-        </p>
-
-        <button className="empty-add-button">
-          ＋ ثبت آگهی در{" "}
-          {category.title}
-        </button>
-      </div>
-    </section>
-  );
-}
-
-/* =========================================================
-   CATEGORY
-========================================================= */
-
-function Category({
-  icon,
-  title,
-  onClick
-}: {
-  icon: string;
-  title: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      className="category-card"
-      onClick={onClick}
-    >
-      <span className="category-icon">
-        {icon}
-      </span>
-
-      <strong>
-        {title}
-      </strong>
-
-      <span className="arrow">
-        ←
-      </span>
-    </button>
-  );
-}
-
-/* =========================================================
-   SKELETON
-========================================================= */
-
-function CategorySkeleton() {
-  return (
-    <div className="category-card category-skeleton">
-      <span className="category-icon">
-        ◌
-      </span>
-
-      <strong>
-        در حال بارگذاری...
-      </strong>
     </div>
   );
 }
@@ -1466,7 +2231,7 @@ function CategorySkeleton() {
 function Feature({
   icon,
   title,
-  text
+  text,
 }: {
   icon: string;
   title: string;
@@ -1474,7 +2239,9 @@ function Feature({
 }) {
   return (
     <div className="feature-card">
-      <span>{icon}</span>
+      <span>
+        {icon}
+      </span>
 
       <div>
         <strong>
@@ -1490,11 +2257,90 @@ function Feature({
 }
 
 /* =========================================================
-   RENDER
+   BOTTOM NAV
 ========================================================= */
 
+function BottomNav({
+  page,
+  goHome,
+  openAccount,
+  openCreateListing,
+}: {
+  page: Page;
+  goHome: () => void;
+  openAccount: () => void;
+  openCreateListing: () => void;
+}) {
+  return (
+    <nav className="bottom-nav">
+      <button
+        type="button"
+        className={
+          page === "home"
+            ? "active"
+            : ""
+        }
+        onClick={goHome}
+      >
+        <span>⌂</span>
+        <small>
+          خانه
+        </small>
+      </button>
+
+      <button
+        type="button"
+        onClick={goHome}
+      >
+        <span>▦</span>
+        <small>
+          دسته‌ها
+        </small>
+      </button>
+
+      <button
+        type="button"
+        className="add-button"
+        onClick={openCreateListing}
+      >
+        <span>＋</span>
+        <small>
+          ثبت آگهی
+        </small>
+      </button>
+
+      <button
+        type="button"
+        onClick={goHome}
+      >
+        <span>⚡</span>
+        <small>
+          خدمات
+        </small>
+      </button>
+
+      <button
+        type="button"
+        className={
+          page === "account"
+            ? "active"
+            : ""
+        }
+        onClick={openAccount}
+      >
+        <span>♙</span>
+        <small>
+          حساب من
+        </small>
+      </button>
+    </nav>
+  );
+}
+
 createRoot(
-  document.getElementById("root")!
+  document.getElementById(
+    "root"
+  )!
 ).render(
   <React.StrictMode>
     <App />
