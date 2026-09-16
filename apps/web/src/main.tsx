@@ -133,8 +133,9 @@ function truncateText(
   if (!text) return "";
 
   return text.length > length
-    ? `${text.slice(0, length)}…`
-    : text;
+  return text.length > length
+  ? text.slice(0, length) + "…"
+  : text;
 }
 
 function getStoredUser(): User | null {
