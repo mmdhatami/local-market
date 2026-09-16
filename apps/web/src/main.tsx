@@ -208,7 +208,9 @@ async function apiFetch<T>(
     throw new Error(
       data?.error ||
         data?.message ||
-        `خطای سرور ${response.status}`
+  data?.error ||
+  data?.message ||
+  "خطای سرور " + response.status
     );
   }
 
