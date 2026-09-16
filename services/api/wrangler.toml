@@ -8,3 +8,8 @@ enabled = true
 [assets]
 directory = "../../apps/web/dist"
 binding = "ASSETS"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "bazar_db"
+database_id = "اینجا-فعلاً-خالی"
