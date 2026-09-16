@@ -2,8 +2,7 @@ import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
-const API_BASE_URL =
-  "https://local-market.mmd-hatami-4450.workers.dev";
+const API_BASE_URL = "";
 
 type Category = {
   id: string;
@@ -26,7 +25,7 @@ function App() {
         const response = await fetch(`${API_BASE_URL}/api/categories`);
 
         if (!response.ok) {
-          throw new Error("Failed to load categories");
+          throw new Error(`Failed to load categories: ${response.status}`);
         }
 
         const data = await response.json();
