@@ -53,9 +53,10 @@ function App() {
     <div className="app">
       <header className="topbar">
         <div className="brand">
-          <div className="brand-mark">ب</div>
+          <div className="brand-mark">د</div>
+
           <div>
-            <strong>بازار</strong>
+            <strong>دردونه</strong>
             <span>بازار هوشمند محلی</span>
           </div>
         </div>
@@ -69,7 +70,7 @@ function App() {
       <main>
         <section className="hero">
           <div className="hero-content">
-            <span className="badge">بازار هوشمند محلی</span>
+            <span className="badge">دردونه | بازار هوشمند محلی</span>
 
             <h1>
               هر چیزی که
