@@ -1051,10 +1051,6 @@ function App() {
             `در حال آماده‌سازی عکس ${index + 1} از ${selectedFiles.length}...`
           );
 
-          /*
-            برای هر عکس یک توکن کاملاً جدید
-            از Worker دریافت می‌کنیم.
-          */
           const auth =
             await getImageKitAuth();
 
