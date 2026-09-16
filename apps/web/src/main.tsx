@@ -139,9 +139,8 @@ function truncateText(
 
 function getStoredUser(): User | null {
   try {
-    const raw = localStorage.getItem(
-      "dardone_user"
-    );
+    const raw =
+      localStorage.getItem("dardone_user");
 
     if (!raw) {
       return null;
@@ -195,7 +194,8 @@ async function apiFetch<T>(
     data = {
       success: false,
       error:
-        text || "پاسخ نامعتبر از سرور",
+        text ||
+        "پاسخ نامعتبر از سرور",
     };
   }
 
@@ -229,7 +229,8 @@ async function uploadImageToImageKit(
   file: File,
   auth: ImageKitAuth
 ) {
-  const formData = new FormData();
+  const formData =
+    new FormData();
 
   formData.append(
     "file",
@@ -266,13 +267,14 @@ async function uploadImageToImageKit(
     "/dardone/listings"
   );
 
-  const response = await fetch(
-    "https://upload.imagekit.io/api/v1/files/upload",
-    {
-      method: "POST",
-      body: formData,
-    }
-  );
+  const response =
+    await fetch(
+      "https://upload.imagekit.io/api/v1/files/upload",
+      {
+        method: "POST",
+        body: formData,
+      }
+    );
 
   const text =
     await response.text();
@@ -317,10 +319,8 @@ function App() {
   const [page, setPage] =
     useState<Page>("home");
 
-  const [
-    categories,
-    setCategories,
-  ] = useState<Category[]>([]);
+  const [categories, setCategories] =
+    useState<Category[]>([]);
 
   const [
     selectedCategory,
@@ -573,7 +573,9 @@ function App() {
         );
       }
 
-      if (searchValue.trim()) {
+      if (
+        searchValue.trim()
+      ) {
         params.set(
           "search",
           searchValue.trim()
@@ -584,7 +586,8 @@ function App() {
         params.toString();
 
       const url = query
-        ? "/api/listings?" + query
+        ? "/api/listings?" +
+          query
         : "/api/listings";
 
       const data =
@@ -803,7 +806,9 @@ function App() {
       value
     );
 
-    setSelectedCategory(null);
+    setSelectedCategory(
+      null
+    );
   }
 
   /* =======================================================
@@ -1016,14 +1021,9 @@ function App() {
       createdListing =
         listingResponse.listing;
 
-      /* ===================================================
-         UPLOAD PHOTOS
-
-         هر عکس توکن ImageKit جداگانه می‌گیرد.
-      =================================================== */
-
       if (
-        selectedFiles.length > 0
+        selectedFiles.length >
+        0
       ) {
         setCreateMessage(
           "در حال آماده‌سازی آپلود عکس‌ها..."
@@ -1042,6 +1042,11 @@ function App() {
               selectedFiles.length +
               "..."
           );
+
+          /*
+           * بسیار مهم:
+           * برای هر عکس یک توکن جدید ImageKit می‌گیریم.
+           */
 
           const auth =
             await getImageKitAuth();
@@ -1065,8 +1070,7 @@ function App() {
               createdListing.id +
               "/photos",
             {
-              method:
-                "POST",
+              method: "POST",
 
               body:
                 JSON.stringify({
@@ -1091,10 +1095,6 @@ function App() {
           : "آگهی با موفقیت ثبت شد."
       );
 
-      /* ===================================================
-         GET FINAL LISTING
-      =================================================== */
-
       const finalData =
         await apiFetch<{
           success: boolean;
@@ -1115,8 +1115,6 @@ function App() {
           photos[0]?.file_url ||
           null,
       });
-
-      /* RESET FORM */
 
       setTitle("");
       setDescription("");
@@ -1186,7 +1184,8 @@ function App() {
           />
         )}
 
-        {page === "category" && (
+        {page ===
+          "category" && (
           <CategoryPage
             category={
               selectedCategory
@@ -1214,7 +1213,8 @@ function App() {
           />
         )}
 
-        {page === "listing" &&
+        {page ===
+          "listing" &&
           selectedListing && (
             <ListingDetailPage
               listing={
@@ -1229,7 +1229,8 @@ function App() {
             />
           )}
 
-        {page === "account" && (
+        {page ===
+          "account" && (
           <AccountPage
             user={user}
             mode={
@@ -1283,7 +1284,8 @@ function App() {
           />
         )}
 
-        {page === "create" && (
+        {page ===
+          "create" && (
           <CreateListingPage
             selectedCategory={
               selectedCategory
@@ -1929,7 +1931,8 @@ function ListingDetailPage({
                     photos[
                       activePhoto
                     ]?.file_url ||
-                    photos[0].file_url
+                    photos[0]
+                      .file_url
                   }
                   alt={
                     listing.title
@@ -2381,8 +2384,6 @@ function CreateListingPage({
               </select>
             </label>
           </div>
-
-          {/* PHOTOS */}
 
           <div className="photo-upload-section">
             <div className="photo-heading">
@@ -3058,7 +3059,8 @@ function BottomNav({
       <button
         type="button"
         className={
-          page === "account"
+          page ===
+          "account"
             ? "active"
             : ""
         }
