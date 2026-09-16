@@ -13,3 +13,6 @@ binding = "ASSETS"
 binding = "DB"
 database_name = "bazar_db"
 database_id = "ffab4dea-492f-4789-8382-324ab1209c2a"
+
+[secrets]
+required = ["IMAGEKIT_PRIVATE_KEY"]
