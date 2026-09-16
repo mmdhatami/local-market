@@ -593,9 +593,9 @@ function App() {
       const query =
         params.toString();
 
-      const url = query
-        ? `/api/listings?${query}`
-        : "/api/listings";
+    const url = query
+  ? "/api/listings?" + query
+  : "/api/listings";
 
       const data =
         await apiFetch<{
