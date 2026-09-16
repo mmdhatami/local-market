@@ -23,17 +23,37 @@ type User = {
   business_verified: boolean;
 };
 
+type Listing = {
+  id: string;
+  title: string;
+  description: string | null;
+  price: number | null;
+  city: string | null;
+  condition: string | null;
+  category_id: string;
+  category_title: string | null;
+  category_icon: string | null;
+  image_url?: string | null;
+};
+
 function App() {
   const [categories, setCategories] = useState<Category[]>([]);
-  const [categoriesLoading, setCategoriesLoading] = useState(true);
+  const [categoriesLoading, setCategoriesLoading] =
+    useState(true);
+
   const [selectedCategory, setSelectedCategory] =
     useState<Category | null>(null);
 
-  const [showAccount, setShowAccount] = useState(false);
+  const [showAccount, setShowAccount] =
+    useState(false);
+
+  const [showCreateListing, setShowCreateListing] =
+    useState(false);
 
   const [user, setUser] = useState<User | null>(() => {
     try {
-      const saved = localStorage.getItem("dardone_user");
+      const saved =
+        localStorage.getItem("dardone_user");
 
       if (!saved) {
         return null;
@@ -50,19 +70,30 @@ function App() {
 
     async function loadCategories() {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/categories`);
+        const response = await fetch(
+          `${API_BASE_URL}/api/categories`
+        );
 
         if (!response.ok) {
-          throw new Error(`Failed to load categories: ${response.status}`);
+          throw new Error(
+            `Failed to load categories: ${response.status}`
+          );
         }
 
         const data = await response.json();
 
-        if (!cancelled && data.success && Array.isArray(data.categories)) {
+        if (
+          !cancelled &&
+          data.success &&
+          Array.isArray(data.categories)
+        ) {
           setCategories(data.categories);
         }
       } catch (error) {
-        console.error("Categories API error:", error);
+        console.error(
+          "Categories API error:",
+          error
+        );
       } finally {
         if (!cancelled) {
           setCategoriesLoading(false);
@@ -77,9 +108,21 @@ function App() {
     };
   }, []);
 
+  function goHome() {
+    setSelectedCategory(null);
+    setShowAccount(false);
+    setShowCreateListing(false);
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth"
+    });
+  }
+
   function openCategory(category: Category) {
     setSelectedCategory(category);
     setShowAccount(false);
+    setShowCreateListing(false);
 
     window.scrollTo({
       top: 0,
@@ -99,6 +142,7 @@ function App() {
   function openAccount() {
     setSelectedCategory(null);
     setShowAccount(true);
+    setShowCreateListing(false);
 
     window.scrollTo({
       top: 0,
@@ -115,7 +159,29 @@ function App() {
     });
   }
 
-  function handleRegisteredUser(newUser: User) {
+  function openCreateListing() {
+    setSelectedCategory(null);
+    setShowAccount(false);
+    setShowCreateListing(true);
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth"
+    });
+  }
+
+  function closeCreateListing() {
+    setShowCreateListing(false);
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth"
+    });
+  }
+
+  function handleRegisteredUser(
+    newUser: User
+  ) {
     setUser(newUser);
 
     localStorage.setItem(
@@ -125,8 +191,12 @@ function App() {
   }
 
   function logout() {
-    localStorage.removeItem("dardone_user");
+    localStorage.removeItem(
+      "dardone_user"
+    );
+
     setUser(null);
+    setShowAccount(true);
   }
 
   return (
@@ -134,20 +204,17 @@ function App() {
       <header className="topbar">
         <button
           className="brand"
-          onClick={() => {
-            setSelectedCategory(null);
-            setShowAccount(false);
-            window.scrollTo({
-              top: 0,
-              behavior: "smooth"
-            });
-          }}
+          onClick={goHome}
         >
-          <div className="brand-mark">د</div>
+          <div className="brand-mark">
+            د
+          </div>
 
           <div>
             <strong>دردونه</strong>
-            <span>بازار هوشمند محلی</span>
+            <span>
+              بازار هوشمند محلی
+            </span>
           </div>
         </button>
 
@@ -160,16 +227,27 @@ function App() {
             className="profile-btn"
             onClick={openAccount}
           >
-            {user ? "حساب من" : "حساب کاربری"}
+            {user
+              ? "حساب من"
+              : "حساب کاربری"}
           </button>
         </div>
       </header>
 
       <main>
-        {showAccount ? (
+        {showCreateListing ? (
+          <CreateListingPage
+            user={user}
+            categories={categories}
+            onBack={closeCreateListing}
+            onNeedAccount={openAccount}
+          />
+        ) : showAccount ? (
           <AccountPage
             user={user}
-            onRegistered={handleRegisteredUser}
+            onRegistered={
+              handleRegisteredUser
+            }
             onLogout={logout}
             onBack={closeAccount}
           />
@@ -181,15 +259,19 @@ function App() {
         ) : (
           <HomePage
             categories={categories}
-            categoriesLoading={categoriesLoading}
-            onCategoryClick={openCategory}
+            categoriesLoading={
+              categoriesLoading
+            }
+            onCategoryClick={
+              openCategory
+            }
           />
         )}
       </main>
 
       <button
         className="floating-add"
-        onClick={openAccount}
+        onClick={openCreateListing}
       >
         ＋ ثبت
       </button>
@@ -197,36 +279,37 @@ function App() {
       <nav className="bottom-nav">
         <button
           className={
-            !selectedCategory && !showAccount
+            !selectedCategory &&
+            !showAccount &&
+            !showCreateListing
               ? "active"
               : ""
           }
-          onClick={() => {
-            setSelectedCategory(null);
-            setShowAccount(false);
-
-            window.scrollTo({
-              top: 0,
-              behavior: "smooth"
-            });
-          }}
+          onClick={goHome}
         >
           <span>⌂</span>
           خانه
         </button>
 
         <button
-          className={selectedCategory ? "active" : ""}
+          className={
+            selectedCategory
+              ? "active"
+              : ""
+          }
           onClick={() => {
+            setShowAccount(false);
+            setShowCreateListing(false);
+
             if (selectedCategory) {
               closeCategory();
             }
 
-            setShowAccount(false);
-
             setTimeout(() => {
               document
-                .querySelector(".categories")
+                .querySelector(
+                  ".categories"
+                )
                 ?.scrollIntoView({
                   behavior: "smooth"
                 });
@@ -248,7 +331,11 @@ function App() {
         </button>
 
         <button
-          className={showAccount ? "active" : ""}
+          className={
+            showAccount
+              ? "active"
+              : ""
+          }
           onClick={openAccount}
         >
           <span>☻</span>
@@ -270,7 +357,9 @@ function HomePage({
 }: {
   categories: Category[];
   categoriesLoading: boolean;
-  onCategoryClick: (category: Category) => void;
+  onCategoryClick: (
+    category: Category
+  ) => void;
 }) {
   return (
     <>
@@ -283,14 +372,17 @@ function HomePage({
           <h1>
             هر چیزی که
             <br />
-            <span>دنبالش هستی،</span>
+            <span>
+              دنبالش هستی،
+            </span>
             <br />
             همین اطرافه.
           </h1>
 
           <p>
-            خرید، فروش، خدمات، کسب‌وکارها، کار، ملک و خودرو؛
-            همه در یک بازار هوشمند و نزدیک به شما.
+            خرید، فروش، خدمات، کسب‌وکارها،
+            کار، ملک و خودرو؛ همه در یک بازار
+            هوشمند و نزدیک به شما.
           </p>
 
           <div className="search-box">
@@ -302,7 +394,9 @@ function HomePage({
               aria-label="جستجو"
             />
 
-            <button>جستجو</button>
+            <button>
+              جستجو
+            </button>
           </div>
         </div>
       </section>
@@ -310,15 +404,24 @@ function HomePage({
       <section className="nearby">
         <div className="section-heading">
           <div>
-            <span>موقعیت شما</span>
-            <h2>اطراف من</h2>
+            <span>
+              موقعیت شما
+            </span>
+
+            <h2>
+              اطراف من
+            </h2>
           </div>
 
-          <button>مشاهده همه ←</button>
+          <button>
+            مشاهده همه ←
+          </button>
         </div>
 
         <div className="nearby-card">
-          <div className="nearby-icon">📍</div>
+          <div className="nearby-icon">
+            📍
+          </div>
 
           <div>
             <strong>
@@ -326,23 +429,33 @@ function HomePage({
             </strong>
 
             <p>
-              با فعال کردن موقعیت مکانی، آگهی‌ها و خدمات
-              نزدیک خودتان را سریع‌تر پیدا کنید.
+              با فعال کردن موقعیت مکانی،
+              آگهی‌ها و خدمات نزدیک خودتان
+              را سریع‌تر پیدا کنید.
             </p>
           </div>
 
-          <button>فعال کردن موقعیت</button>
+          <button>
+            فعال کردن موقعیت
+          </button>
         </div>
       </section>
 
       <section className="categories">
         <div className="section-heading">
           <div>
-            <span>دسته‌بندی‌ها</span>
-            <h2>چی می‌خوای پیدا کنی؟</h2>
+            <span>
+              دسته‌بندی‌ها
+            </span>
+
+            <h2>
+              چی می‌خوای پیدا کنی؟
+            </h2>
           </div>
 
-          <button>همه دسته‌ها ←</button>
+          <button>
+            همه دسته‌ها ←
+          </button>
         </div>
 
         <div className="category-grid">
@@ -354,16 +467,25 @@ function HomePage({
               <CategorySkeleton />
             </>
           ) : categories.length > 0 ? (
-            categories.map((category) => (
-              <Category
-                key={category.id}
-                icon={category.icon || "📦"}
-                title={category.title}
-                onClick={() =>
-                  onCategoryClick(category)
-                }
-              />
-            ))
+            categories.map(
+              (category) => (
+                <Category
+                  key={category.id}
+                  icon={
+                    category.icon ||
+                    "📦"
+                  }
+                  title={
+                    category.title
+                  }
+                  onClick={() =>
+                    onCategoryClick(
+                      category
+                    )
+                  }
+                />
+              )
+            )
           ) : (
             <div className="category-error">
               <strong>
@@ -408,6 +530,403 @@ function HomePage({
 }
 
 /* =========================================================
+   CREATE LISTING
+========================================================= */
+
+function CreateListingPage({
+  user,
+  categories,
+  onBack,
+  onNeedAccount
+}: {
+  user: User | null;
+  categories: Category[];
+  onBack: () => void;
+  onNeedAccount: () => void;
+}) {
+  const [categoryId, setCategoryId] =
+    useState("");
+
+  const [title, setTitle] =
+    useState("");
+
+  const [description, setDescription] =
+    useState("");
+
+  const [price, setPrice] =
+    useState("");
+
+  const [city, setCity] =
+    useState("شهرکرد");
+
+  const [condition, setCondition] =
+    useState("used");
+
+  const [priceType, setPriceType] =
+    useState("fixed");
+
+  const [loading, setLoading] =
+    useState(false);
+
+  const [error, setError] =
+    useState("");
+
+  const [success, setSuccess] =
+    useState("");
+
+  async function submitListing() {
+    setError("");
+    setSuccess("");
+
+    if (!user) {
+      setError(
+        "برای ثبت آگهی ابتدا وارد حساب کاربری شوید."
+      );
+      return;
+    }
+
+    if (!categoryId) {
+      setError(
+        "لطفاً یک دسته‌بندی انتخاب کنید."
+      );
+      return;
+    }
+
+    if (!title.trim()) {
+      setError(
+        "عنوان آگهی را وارد کنید."
+      );
+      return;
+    }
+
+    if (title.trim().length < 3) {
+      setError(
+        "عنوان آگهی باید حداقل ۳ کاراکتر باشد."
+      );
+      return;
+    }
+
+    if (!description.trim()) {
+      setError(
+        "توضیحات آگهی را وارد کنید."
+      );
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/listings`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type":
+              "application/json"
+          },
+          body: JSON.stringify({
+            user_id: user.id,
+            category_id: categoryId,
+            title: title.trim(),
+            description:
+              description.trim(),
+            listing_type: "product",
+            price:
+              price.trim() !== ""
+                ? Number(
+                    price.replace(
+                      /,/g,
+                      ""
+                    )
+                  )
+                : null,
+            price_type: priceType,
+            city: city.trim() || null,
+            condition:
+              condition || null
+          })
+        }
+      );
+
+      const data =
+        await response.json();
+
+      if (
+        !response.ok ||
+        !data.success
+      ) {
+        throw new Error(
+          data.error ||
+            "ثبت آگهی انجام نشد."
+        );
+      }
+
+      setSuccess(
+        "آگهی شما با موفقیت ثبت شد."
+      );
+
+      setTitle("");
+      setDescription("");
+      setPrice("");
+      setCategoryId("");
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "خطایی در ثبت آگهی رخ داد."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (!user) {
+    return (
+      <section className="create-listing-page">
+        <button
+          className="back-button"
+          onClick={onBack}
+        >
+          → بازگشت به دردونه
+        </button>
+
+        <div className="create-listing-card account-required-card">
+          <div className="create-listing-icon">
+            🔐
+          </div>
+
+          <span className="account-label">
+            ثبت آگهی
+          </span>
+
+          <h1>
+            ابتدا وارد حساب کاربری شوید
+          </h1>
+
+          <p>
+            برای ثبت آگهی و مدیریت آن،
+            لازم است یک حساب کاربری داشته باشید.
+          </p>
+
+          <button
+            className="primary-account-button"
+            onClick={onNeedAccount}
+          >
+            ورود / ساخت حساب
+          </button>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="create-listing-page">
+      <button
+        className="back-button"
+        onClick={onBack}
+      >
+        → بازگشت به دردونه
+      </button>
+
+      <div className="create-listing-card">
+        <div className="create-listing-icon">
+          ＋
+        </div>
+
+        <span className="account-label">
+          آگهی جدید
+        </span>
+
+        <h1>
+          ثبت آگهی
+        </h1>
+
+        <p className="create-listing-description">
+          اطلاعات آگهی را وارد کنید تا در
+          دسته‌بندی مربوطه نمایش داده شود.
+        </p>
+
+        <label className="form-label">
+          دسته‌بندی
+        </label>
+
+        <select
+          className="form-input form-select"
+          value={categoryId}
+          onChange={(event) =>
+            setCategoryId(
+              event.target.value
+            )
+          }
+        >
+          <option value="">
+            انتخاب دسته‌بندی
+          </option>
+
+          {categories.map(
+            (category) => (
+              <option
+                key={category.id}
+                value={category.id}
+              >
+                {category.icon || "📦"}{" "}
+                {category.title}
+              </option>
+            )
+          )}
+        </select>
+
+        <label className="form-label">
+          عنوان آگهی
+        </label>
+
+        <input
+          className="form-input"
+          type="text"
+          value={title}
+          onChange={(event) =>
+            setTitle(
+              event.target.value
+            )
+          }
+          placeholder="مثلاً فروش گوشی سامسونگ"
+        />
+
+        <label className="form-label">
+          توضیحات
+        </label>
+
+        <textarea
+          className="form-textarea"
+          value={description}
+          onChange={(event) =>
+            setDescription(
+              event.target.value
+            )
+          }
+          placeholder="توضیحات کامل آگهی را بنویسید..."
+          rows={5}
+        />
+
+        <label className="form-label">
+          قیمت
+        </label>
+
+        <input
+          className="form-input"
+          type="text"
+          inputMode="numeric"
+          value={price}
+          onChange={(event) =>
+            setPrice(
+              event.target.value
+            )
+          }
+          placeholder="مثلاً ۱۵۰۰۰۰۰۰"
+          dir="ltr"
+        />
+
+        <label className="form-label">
+          نوع قیمت
+        </label>
+
+        <select
+          className="form-input form-select"
+          value={priceType}
+          onChange={(event) =>
+            setPriceType(
+              event.target.value
+            )
+          }
+        >
+          <option value="fixed">
+            قیمت ثابت
+          </option>
+
+          <option value="negotiable">
+            توافقی
+          </option>
+        </select>
+
+        <label className="form-label">
+          شهر
+        </label>
+
+        <input
+          className="form-input"
+          type="text"
+          value={city}
+          onChange={(event) =>
+            setCity(
+              event.target.value
+            )
+          }
+          placeholder="مثلاً شهرکرد"
+        />
+
+        <label className="form-label">
+          وضعیت کالا
+        </label>
+
+        <select
+          className="form-input form-select"
+          value={condition}
+          onChange={(event) =>
+            setCondition(
+              event.target.value
+            )
+          }
+        >
+          <option value="new">
+            نو
+          </option>
+
+          <option value="used">
+            کارکرده
+          </option>
+
+          <option value="like_new">
+            در حد نو
+          </option>
+
+          <option value="unknown">
+            مشخص نشده
+          </option>
+        </select>
+
+        {error && (
+          <div className="form-error">
+            {error}
+          </div>
+        )}
+
+        {success && (
+          <div className="form-success">
+            {success}
+          </div>
+        )}
+
+        <button
+          className="primary-account-button"
+          onClick={submitListing}
+          disabled={loading}
+        >
+          {loading
+            ? "در حال ثبت آگهی..."
+            : "ثبت آگهی"}
+        </button>
+
+        <p className="form-note">
+          در مرحله بعدی، عکس، موقعیت دقیق،
+          مدیریت آگهی و امکانات بیشتر به این
+          فرم اضافه می‌شود.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+/* =========================================================
    ACCOUNT
 ========================================================= */
 
@@ -418,35 +937,55 @@ function AccountPage({
   onBack
 }: {
   user: User | null;
-  onRegistered: (user: User) => void;
+  onRegistered: (
+    user: User
+  ) => void;
   onLogout: () => void;
   onBack: () => void;
 }) {
-  const [mode, setMode] = useState<"login" | "register">(
-    "register"
-  );
+  const [mode, setMode] =
+    useState<"login" | "register">(
+      "register"
+    );
 
-  const [fullName, setFullName] = useState("");
-  const [mobile, setMobile] = useState("");
-  const [password, setPassword] = useState("");
-  const [repeatPassword, setRepeatPassword] =
+  const [fullName, setFullName] =
     useState("");
 
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
+  const [mobile, setMobile] =
+    useState("");
+
+  const [password, setPassword] =
+    useState("");
+
+  const [
+    repeatPassword,
+    setRepeatPassword
+  ] = useState("");
+
+  const [loading, setLoading] =
+    useState(false);
+
+  const [message, setMessage] =
+    useState("");
+
+  const [error, setError] =
+    useState("");
 
   async function register() {
     setError("");
     setMessage("");
 
     if (!fullName.trim()) {
-      setError("نام و نام خانوادگی را وارد کنید.");
+      setError(
+        "نام و نام خانوادگی را وارد کنید."
+      );
       return;
     }
 
     if (!mobile.trim()) {
-      setError("شماره موبایل را وارد کنید.");
+      setError(
+        "شماره موبایل را وارد کنید."
+      );
       return;
     }
 
@@ -457,7 +996,9 @@ function AccountPage({
       return;
     }
 
-    if (password !== repeatPassword) {
+    if (
+      password !== repeatPassword
+    ) {
       setError(
         "رمز عبور و تکرار آن یکسان نیستند."
       );
@@ -472,21 +1013,29 @@ function AccountPage({
         {
           method: "POST",
           headers: {
-            "Content-Type": "application/json"
+            "Content-Type":
+              "application/json"
           },
           body: JSON.stringify({
-            full_name: fullName.trim(),
-            mobile: mobile.trim(),
+            full_name:
+              fullName.trim(),
+            mobile:
+              mobile.trim(),
             password
           })
         }
       );
 
-      const data = await response.json();
+      const data =
+        await response.json();
 
-      if (!response.ok || !data.success) {
+      if (
+        !response.ok ||
+        !data.success
+      ) {
         throw new Error(
-          data.error || "ثبت‌نام انجام نشد."
+          data.error ||
+            "ثبت‌نام انجام نشد."
         );
       }
 
@@ -530,7 +1079,9 @@ function AccountPage({
             حساب کاربری
           </span>
 
-          <h1>{user.full_name}</h1>
+          <h1>
+            {user.full_name}
+          </h1>
 
           <p className="account-mobile">
             📱 {user.mobile}
@@ -538,7 +1089,10 @@ function AccountPage({
 
           <div className="account-status">
             <div>
-              <span>تأیید شماره</span>
+              <span>
+                تأیید شماره
+              </span>
+
               <strong>
                 {user.phone_verified
                   ? "✓ تأیید شده"
@@ -547,7 +1101,10 @@ function AccountPage({
             </div>
 
             <div>
-              <span>احراز هویت</span>
+              <span>
+                احراز هویت
+              </span>
+
               <strong>
                 {user.identity_verified
                   ? "✓ تأیید شده"
@@ -556,7 +1113,10 @@ function AccountPage({
             </div>
 
             <div>
-              <span>تأیید کسب‌وکار</span>
+              <span>
+                تأیید کسب‌وکار
+              </span>
+
               <strong>
                 {user.business_verified
                   ? "✓ تأیید شده"
@@ -619,8 +1179,9 @@ function AccountPage({
         </h1>
 
         <p className="account-description">
-          برای استفاده از امکانات کامل دردونه حساب
-          کاربری خودت را داشته باش.
+          برای استفاده از امکانات کامل
+          دردونه حساب کاربری خودت را داشته
+          باش.
         </p>
 
         <div className="account-tabs">
@@ -666,7 +1227,9 @@ function AccountPage({
               type="text"
               value={fullName}
               onChange={(event) =>
-                setFullName(event.target.value)
+                setFullName(
+                  event.target.value
+                )
               }
               placeholder="مثلاً محمد حاتمی"
             />
@@ -680,7 +1243,9 @@ function AccountPage({
               type="tel"
               value={mobile}
               onChange={(event) =>
-                setMobile(event.target.value)
+                setMobile(
+                  event.target.value
+                )
               }
               placeholder="09xxxxxxxxx"
               dir="ltr"
@@ -695,7 +1260,9 @@ function AccountPage({
               type="password"
               value={password}
               onChange={(event) =>
-                setPassword(event.target.value)
+                setPassword(
+                  event.target.value
+                )
               }
               placeholder="حداقل ۶ کاراکتر"
               dir="ltr"
@@ -710,7 +1277,9 @@ function AccountPage({
               type="password"
               value={repeatPassword}
               onChange={(event) =>
-                setRepeatPassword(event.target.value)
+                setRepeatPassword(
+                  event.target.value
+                )
               }
               placeholder="رمز عبور را دوباره وارد کنید"
               dir="ltr"
@@ -739,8 +1308,9 @@ function AccountPage({
             </button>
 
             <p className="form-note">
-              در مراحل بعدی تأیید شماره موبایل، احراز هویت
-              و امکانات امنیتی تکمیل می‌شوند.
+              در مراحل بعدی تأیید شماره
+              موبایل، احراز هویت و امکانات
+              امنیتی تکمیل می‌شوند.
             </p>
           </>
         ) : (
@@ -752,8 +1322,9 @@ function AccountPage({
             </h2>
 
             <p>
-              زیرساخت حساب کاربری آماده شده و در مرحله
-              بعد سیستم ورود امن را به آن متصل می‌کنیم.
+              زیرساخت حساب کاربری آماده شده
+              و در مرحله بعد سیستم ورود امن
+              را به آن متصل می‌کنیم.
             </p>
 
             <button
@@ -797,8 +1368,13 @@ function CategoryPage({
         </div>
 
         <div>
-          <span>دسته‌بندی</span>
-          <h1>{category.title}</h1>
+          <span>
+            دسته‌بندی
+          </span>
+
+          <h1>
+            {category.title}
+          </h1>
         </div>
       </div>
 
@@ -814,16 +1390,18 @@ function CategoryPage({
         </div>
 
         <h2>
-          آگهی‌های {category.title}
+          آگهی‌های{" "}
+          {category.title}
         </h2>
 
         <p>
-          به‌زودی آگهی‌های این دسته در اینجا نمایش
-          داده می‌شوند.
+          آگهی‌های این دسته پس از ثبت
+          در اینجا نمایش داده خواهند شد.
         </p>
 
         <button className="empty-add-button">
-          ＋ ثبت آگهی در {category.title}
+          ＋ ثبت آگهی در{" "}
+          {category.title}
         </button>
       </div>
     </section>
@@ -852,7 +1430,9 @@ function Category({
         {icon}
       </span>
 
-      <strong>{title}</strong>
+      <strong>
+        {title}
+      </strong>
 
       <span className="arrow">
         ←
@@ -897,9 +1477,13 @@ function Feature({
       <span>{icon}</span>
 
       <div>
-        <strong>{title}</strong>
+        <strong>
+          {title}
+        </strong>
 
-        <p>{text}</p>
+        <p>
+          {text}
+        </p>
       </div>
     </div>
   );
