@@ -160,10 +160,6 @@ async function createImageKitSignature(
 
   const bytes = new Uint8Array(signatureBuffer);
 
-  /*
-   * ImageKit signature باید hexadecimal باشد،
-   * نه Base64.
-   */
   return Array.from(bytes)
     .map((byte) =>
       byte.toString(16).padStart(2, "0")
@@ -200,17 +196,46 @@ app.get("/api/health", async (c) => {
 });
 
 /* =========================================================
+   IMAGEKIT DEBUG
+   فقط برای بررسی اینکه Secret واقعاً به Worker رسیده
+   خود Secret هرگز نمایش داده نمی‌شود.
+========================================================= */
+
+app.get("/api/debug-imagekit", (c) => {
+  const secret = c.env.IMAGEKIT_PRIVATE_KEY;
+
+  return c.json({
+    success: true,
+    imagekit_secret_exists:
+      typeof secret === "string" &&
+      secret.length > 0,
+    imagekit_secret_type:
+      typeof secret,
+    imagekit_secret_length:
+      typeof secret === "string"
+        ? secret.length
+        : 0
+  });
+});
+
+/* =========================================================
    IMAGEKIT AUTH
 ========================================================= */
 
 app.post("/api/imagekit-auth", async (c) => {
   try {
-    if (!c.env.IMAGEKIT_PRIVATE_KEY) {
+    const privateKey =
+      c.env.IMAGEKIT_PRIVATE_KEY;
+
+    if (
+      typeof privateKey !== "string" ||
+      privateKey.trim().length === 0
+    ) {
       return c.json(
         {
           success: false,
           error:
-            "IMAGEKIT_PRIVATE_KEY در Cloudflare تنظیم نشده است."
+            "IMAGEKIT_PRIVATE_KEY در Runtime Variables & Secrets قابل دسترسی نیست."
         },
         500
       );
@@ -223,7 +248,7 @@ app.post("/api/imagekit-auth", async (c) => {
 
     const signature =
       await createImageKitSignature(
-        c.env.IMAGEKIT_PRIVATE_KEY,
+        privateKey,
         token,
         expire
       );
