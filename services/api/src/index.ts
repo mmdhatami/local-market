@@ -42,17 +42,6 @@ function base64FromBytes(bytes: Uint8Array) {
   return btoa(binary);
 }
 
-function bytesFromBase64(value: string) {
-  const binary = atob(value);
-  const bytes = new Uint8Array(binary.length);
-
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-
-  return bytes;
-}
-
 function normalizeMobile(value: unknown) {
   return String(value ?? "")
     .trim()
@@ -141,6 +130,7 @@ async function hashPassword(password: string) {
 
 /* =========================================================
    IMAGEKIT SIGNATURE
+   SHA-1 HMAC
 ========================================================= */
 
 async function createImageKitSignature(
@@ -168,17 +158,17 @@ async function createImageKitSignature(
       encoder.encode(`${token}${expire}`)
     );
 
-  const bytes = new Uint8Array(
-    signatureBuffer
-  );
+  const bytes = new Uint8Array(signatureBuffer);
 
-  let binary = "";
-
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
-  }
-
-  return btoa(binary);
+  /*
+   * ImageKit signature باید hexadecimal باشد،
+   * نه Base64.
+   */
+  return Array.from(bytes)
+    .map((byte) =>
+      byte.toString(16).padStart(2, "0")
+    )
+    .join("");
 }
 
 /* =========================================================
@@ -243,10 +233,6 @@ app.post("/api/imagekit-auth", async (c) => {
       token,
       expire,
       signature,
-
-      /*
-       * این کلید عمومی است و اطلاعات محرمانه محسوب نمی‌شود.
-       */
       publicKey:
         "public_W4QIebCncXt6i+kQa1XC7LAZH5M="
     });
@@ -1097,7 +1083,9 @@ app.post(
             listing_id: listingId,
             file_key: fileKey,
             file_url: fileUrl,
-            sort_order: sortOrder
+            sort_order: Number.isFinite(sortOrder)
+              ? sortOrder
+              : 0
           }
         },
         201
@@ -1209,7 +1197,10 @@ app.get("/", async (c) => {
       <html lang="fa" dir="rtl">
         <head>
           <meta charset="UTF-8" />
-          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1.0"
+          />
           <title>دردونه</title>
         </head>
         <body>
